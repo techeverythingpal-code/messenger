@@ -36,3 +36,13 @@ button.small { width: auto; padding: 6px 12px; }
 .bubble.bad { font-style: italic; opacity: .7; }
 .bubble small { display: block; font-size: 11px; opacity: .7; margin-top: 2px; }
 .empty { color: #888; text-align: center; font-size: 14px; margin: auto; }
+h3 { font-size: 14px; margin: 0 0 6px; color: #5b2a86; }
+.section { margin: 16px 0; }
+.contact { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #eee; gap: 8px; }
+.actions { display: flex; gap: 6px; }
+.contact .secondary, .actions .secondary { margin-top: 0; }
+button.linklike { width: auto; background: none; color: #222; padding: 4px 0; text-align: left; flex: 1; }
+button.linklike:disabled { color: #999; cursor: not-allowed; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #bbb; margin-right: 6px; }
+.dot.on { background: #2ecc71; }
+.badge { background: #e53935; color: #fff; border-radius: 10px; font-size: 11px; padding: 1px 7px; margin-left: 8px; }

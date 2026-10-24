@@ -1,9 +1,29 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { ensureIdentity, resetIdentity } from '../crypto/identity'
 import { loadKeyPair } from '../crypto/keys'
+import { useContacts } from '../lib/useContacts'
+import { usePresence } from '../lib/usePresence'
 import UsernameForm from '../components/UsernameForm'
+import ContactList from '../components/ContactList'
 import Chat from '../components/Chat'
+
+// "Last message I've read" per contact, kept on this device only
+const readKey = (userId) => `lastread:${userId}`
+function readMap(userId) {
+  try {
+    return JSON.parse(localStorage.getItem(readKey(userId))) || {}
+  } catch {
+    return {}
+  }
+}
+function writeMap(userId, map) {
+  try {
+    localStorage.setItem(readKey(userId), JSON.stringify(map))
+  } catch {
+    /* storage unavailable: unread counts just won't persist */
+  }
+}
 
 async function loadAll(userId, identity) {
   if (identity.status !== 'ok') {
@@ -23,11 +43,15 @@ export default function Home({ session }) {
   const userId = session.user.id
   const [identity, setIdentity] = useState(null)
   const [privateKey, setPrivateKey] = useState(null)
-  const [username, setUsername] = useState(undefined) // undefined = loading, null = not chosen yet
+  const [username, setUsername] = useState(undefined) // undefined = loading, null = not chosen
   const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
-  const [searchMsg, setSearchMsg] = useState('')
   const [contact, setContact] = useState(null)
+  const [unread, setUnread] = useState({})
+  const openRef = useRef(null)
+
+  const ready = identity?.status === 'ok' && !!username
+  const { friends, incoming, outgoing, error: contactsError, reload } = useContacts(userId, ready)
+  const online = usePresence(userId, ready)
 
   function apply(r) {
     setIdentity(r.identity)
@@ -46,6 +70,80 @@ export default function Home({ session }) {
     }
   }, [userId])
 
+  useEffect(() => {
+    openRef.current = contact?.id ?? null
+  }, [contact])
+
+  // Mark messages up to msgId as read for this contact
+  const markRead = useCallback(
+    (contactId, msgId) => {
+      const map = readMap(userId)
+      if ((map[contactId] ?? 0) < msgId) {
+        map[contactId] = msgId
+        writeMap(userId, map)
+      }
+      setUnread((prev) => (prev[contactId] ? { ...prev, [contactId]: 0 } : prev))
+    },
+    [userId]
+  )
+
+  // Count unread messages on startup
+  useEffect(() => {
+    if (!ready) return
+    let cancelled = false
+    supabase
+      .from('messages')
+      .select('id, sender_id')
+      .eq('receiver_id', userId)
+      .order('id', { ascending: false })
+      .limit(500)
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        const map = readMap(userId)
+        const counts = {}
+        for (const m of data) {
+          if (m.id > (map[m.sender_id] ?? 0)) {
+            counts[m.sender_id] = (counts[m.sender_id] || 0) + 1
+          }
+        }
+        setUnread(counts)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [ready, userId])
+
+  // New messages from people whose chat isn't open
+  useEffect(() => {
+    if (!ready) return
+    const channel = supabase
+      .channel(`inbox:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${userId}`,
+        },
+        (payload) => {
+          const sender = payload.new.sender_id
+          if (openRef.current === sender) return
+          setUnread((prev) => ({ ...prev, [sender]: (prev[sender] || 0) + 1 }))
+        }
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [ready, userId])
+
+  // Show the unread total in the browser tab title
+  const totalUnread = friends.reduce((n, f) => n + (unread[f.id] || 0), 0)
+  useEffect(() => {
+    document.title = totalUnread ? `(${totalUnread}) Messenger` : 'Messenger'
+  }, [totalUnread])
+
   async function handleReset() {
     const ok = window.confirm(
       'Create new encryption keys on this device?\n\n' +
@@ -60,30 +158,6 @@ export default function Home({ session }) {
     }
   }
 
-  async function findContact(e) {
-    e.preventDefault()
-    setSearchMsg('')
-    const name = search.trim().toLowerCase().replace(/^@/, '')
-
-    if (!/^[a-z0-9_]{3,20}$/.test(name)) {
-      setSearchMsg('Usernames are 3-20 letters, numbers or underscores.')
-      return
-    }
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, username, public_key')
-      .eq('username', name)
-      .maybeSingle()
-
-    if (error) return setSearchMsg(error.message)
-    if (!data) return setSearchMsg('No user with that username.')
-    if (data.id === userId) return setSearchMsg("That's you!")
-    if (!data.public_key) return setSearchMsg("This user hasn't set up encryption yet.")
-
-    setContact(data)
-  }
-
   return (
     <div className="card">
       <h1>Messenger</h1>
@@ -92,6 +166,7 @@ export default function Home({ session }) {
       </p>
 
       {error && <p className="msg">Error: {error}</p>}
+      {contactsError && <p className="msg">Contacts error: {contactsError}</p>}
       {!identity && !error && <p>Setting up encryption keys...</p>}
 
       {identity?.status === 'conflict' && (
@@ -110,20 +185,18 @@ export default function Home({ session }) {
         <UsernameForm userId={userId} onSaved={setUsername} />
       )}
 
-      {identity?.status === 'ok' && username && !contact && (
+      {ready && !contact && (
         <div>
-          <form className="row" onSubmit={findContact}>
-            <input
-              placeholder="Find a friend by username"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              maxLength={21}
-              autoComplete="off"
-            />
-            <button type="submit">Find</button>
-          </form>
-          {searchMsg && <p className="msg">{searchMsg}</p>}
-
+          <ContactList
+            myId={userId}
+            friends={friends}
+            incoming={incoming}
+            outgoing={outgoing}
+            online={online}
+            unread={unread}
+            onOpen={setContact}
+            reload={reload}
+          />
           <div className="ok">
             <strong>Your key fingerprint</strong>
             <code className="fp">{identity.fingerprint}</code>
@@ -131,12 +204,14 @@ export default function Home({ session }) {
         </div>
       )}
 
-      {identity?.status === 'ok' && username && contact && privateKey && (
+      {ready && contact && privateKey && (
         <Chat
           key={contact.id}
           myId={userId}
           myPrivateKey={privateKey}
           contact={contact}
+          online={online.has(contact.id)}
+          onSeen={(id) => markRead(contact.id, id)}
           onClose={() => setContact(null)}
         />
       )}

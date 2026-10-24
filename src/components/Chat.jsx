@@ -23,13 +23,17 @@ function mergeInto(prev, views) {
   return [...map.values()].sort((a, b) => a.id - b.id)
 }
 
-export default function Chat({ myId, myPrivateKey, contact, onClose }) {
+export default function Chat({ myId, myPrivateKey, contact, online, onSeen, onClose }) {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
   const [fp, setFp] = useState('')
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const listRef = useRef(null)
+    const onSeenRef = useRef(onSeen)
+  useEffect(() => {
+    onSeenRef.current = onSeen
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -87,6 +91,12 @@ export default function Chat({ myId, myPrivateKey, contact, onClose }) {
     if (el) el.scrollTop = el.scrollHeight
   }, [messages])
 
+  // Tell the parent how far we've read (used for unread badges)
+  useEffect(() => {
+    if (messages.length) onSeenRef.current(messages[messages.length - 1].id)
+  }, [messages])
+
+
   async function handleSend(e) {
     e.preventDefault()
     const t = text.trim()
@@ -118,7 +128,9 @@ export default function Chat({ myId, myPrivateKey, contact, onClose }) {
   return (
     <div>
       <div className="chat-head">
-        <strong>@{contact.username}</strong>
+        <strong>
+  <span className={`dot ${online ? 'on' : ''}`} /> @{contact.username}
+</strong>
         <button className="small" onClick={onClose}>Close</button>
       </div>
 
