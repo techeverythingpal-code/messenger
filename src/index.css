@@ -121,3 +121,5 @@ button.linkdanger:hover:not(:disabled) { background: none; color: #7f0017; }
 .dangerbox .row button { flex: 1; }
 button.danger { background: #c62828; }
 button.danger:hover:not(:disabled) { background: #8e0000; }
+.expiry { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 4px 0; }
+.expiry select { padding: 3px 6px; font-size: 12px; }

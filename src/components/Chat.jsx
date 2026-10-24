@@ -47,8 +47,16 @@ function mergeInto(prev, views) {
   return [...map.values()].sort((a, b) => a.id - b.id)
 }
 
+const EXPIRY_OPTIONS = [
+  { value: 'off', label: 'Off', seconds: null },
+  { value: '3600', label: '1 hour', seconds: 3600 },
+  { value: '86400', label: '1 day', seconds: 86400 },
+  { value: '604800', label: '7 days', seconds: 604800 },
+]
+
 export default function Chat({
-  myId, myName, myPrivateKey, contact, status, onSeen, onBuzz, onClose,
+  myId, myName, myPrivateKey, contact, status, expireAfter,
+  onExpiryChanged, onSeen, onBuzz, onClose,
 }) {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
@@ -56,6 +64,15 @@ export default function Chat({
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
+    // Re-check every 30 seconds so expired messages disappear from the screen
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000)
+    return () => clearInterval(t)
+  }, [])
+  const visible = expireAfter
+    ? messages.filter((m) => new Date(m.time).getTime() > now - expireAfter * 1000)
+    : messages
 
   const listRef = useRef(null)
   const inputRef = useRef(null)
@@ -203,6 +220,25 @@ export default function Chat({
     })
   }
 
+    async function handleExpiry(e) {
+    const opt = EXPIRY_OPTIONS.find((o) => o.value === e.target.value)
+    if (!opt) return
+    if (opt.seconds) {
+      const ok = window.confirm(
+        `Messages older than ${opt.label} will be deleted for BOTH of you, ` +
+          `and new messages will disappear after ${opt.label}.\n\n` +
+          'This cannot be undone. Continue?'
+      )
+      if (!ok) return
+    }
+    setError('')
+    const { error } = await supabase.rpc('set_disappearing', {
+      p_contact_id: contact.rowId,
+      p_seconds: opt.seconds,
+    })
+    if (error) setError(error.message)
+    else onExpiryChanged()
+  }
   const dot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
   const statusText =
     status === 'available' ? 'Online' : status === 'busy' ? 'Busy' : 'Offline'
@@ -226,9 +262,26 @@ export default function Chat({
         </p>
       </details>
 
+            <div className="expiry">
+        <label>
+          ⏳ Disappearing messages{' '}
+          <select
+            value={expireAfter ? String(expireAfter) : 'off'}
+            onChange={handleExpiry}
+          >
+            {EXPIRY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        {expireAfter && <span className="muted">applies to both of you</span>}
+      </div>
+
+
+
       <div className="log" ref={listRef}>
-        {messages.length === 0 && <p className="empty">No messages yet. Say hi!</p>}
-        {messages.map((m) =>
+        {visible.length === 0 && <p className="empty">No messages yet. Say hi!</p>}
+        {visible.map((m) =>
           m.buzz ? (
             <div key={m.id} className="line system">
               📳 {m.mine ? 'You buzzed' : `@${contact.username} buzzed you`}!

@@ -8,7 +8,7 @@ export function useContacts(userId, enabled) {
   const reload = useCallback(async () => {
     const { data: rows, error } = await supabase
       .from('contacts')
-      .select('id, requester_id, addressee_id, status')
+            .select('id, requester_id, addressee_id, status, disappear_after_seconds')
     if (error) return setError(error.message)
 
     const otherId = (r) => (r.requester_id === userId ? r.addressee_id : r.requester_id)
@@ -31,7 +31,7 @@ export function useContacts(userId, enabled) {
     for (const r of rows) {
       const p = byId.get(otherId(r))
       if (!p) continue
-      const item = { rowId: r.id, ...p }
+            const item = { rowId: r.id, expireAfter: r.disappear_after_seconds, ...p }
       if (r.status === 'accepted') friends.push(item)
       else if (r.addressee_id === userId) incoming.push(item)
       else outgoing.push(item)

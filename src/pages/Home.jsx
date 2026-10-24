@@ -277,6 +277,8 @@ export default function Home({ session }) {
             myPrivateKey={privateKey}
             contact={contact}
             status={online.get(contact.id)}
+            expireAfter={friends.find((f) => f.id === contact.id)?.expireAfter ?? null}
+            onExpiryChanged={reload}
             onSeen={(id) => markRead(contact.id, id)}
             onBuzz={shake}
             onClose={() => setContact(null)}
