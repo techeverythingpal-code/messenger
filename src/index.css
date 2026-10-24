@@ -1,48 +1,114 @@
+:root {
+  --purple: #6b2fa0;
+  --purple-dark: #4a1d73;
+  --purple-soft: #f3effa;
+  --line: #ddd5ea;
+}
+
+* { box-sizing: border-box; }
+
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f0f4fa;
+  padding: 24px 12px;
   display: flex;
   justify-content: center;
-  padding: 40px 16px;
+  background: #e9e4f2;
+  color: #222;
+  font-family: Tahoma, Verdana, Arial, sans-serif;
+  font-size: 14px;
 }
-#root { width: 100%; max-width: 480px; }
-.card { background: #fff; padding: 24px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
-h1 { margin: 0 0 4px; color: #5b2a86; }
-h2 { margin: 0 0 16px; font-size: 18px; font-weight: normal; }
-input { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; }
-button { width: 100%; padding: 10px; background: #5b2a86; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
-button:disabled { opacity: .6; }
-.msg { color: #b00020; font-size: 14px; }
-.switch { font-size: 14px; text-align: center; }
-.center { text-align: center; }
-.ok { background: #e8f5e9; padding: 12px; border-radius: 6px; margin: 12px 0; }
-.warn { background: #fff4e5; padding: 12px; border-radius: 6px; margin: 12px 0; }
-.ok p, .warn p { margin: 6px 0; font-size: 14px; }
-.fp { display: block; font-family: monospace; font-size: 13px; word-break: break-word; }
-.tests { font-size: 13px; padding-left: 18px; }
-.who { font-size: 14px; color: #555; margin: 0 0 12px; }
-.hint { font-size: 13px; color: #666; }
-.secondary { background: #777; margin-top: 12px; }
+#root { width: 100%; max-width: 440px; }
+
+h1 { margin: 0 0 4px; color: var(--purple); }
+h2 { margin: 0 0 12px; font-size: 18px; font-weight: normal; }
+h3 { margin: 0 0 6px; font-size: 14px; color: var(--purple); }
+a { color: var(--purple); }
+
+.card { background: #fff; padding: 24px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
+
+input, select { padding: 9px 10px; border: 1px solid #c9bfd9; border-radius: 6px; font: inherit; background: #fff; }
+input { width: 100%; margin-bottom: 10px; }
+
+button { width: 100%; padding: 9px 12px; background: var(--purple); color: #fff; border: 0; border-radius: 6px; cursor: pointer; font: inherit; }
+button:hover:not(:disabled) { background: var(--purple-dark); }
+button:disabled { opacity: .6; cursor: not-allowed; }
+button.secondary { background: #7a7385; }
+button.secondary:hover:not(:disabled) { background: #5f5969; }
+button.small { width: auto; padding: 5px 10px; font-size: 13px; }
+
 .row { display: flex; gap: 8px; }
 .row input { margin-bottom: 0; }
-.row button { width: auto; padding: 10px 16px; }
-.chat-head { display: flex; justify-content: space-between; align-items: center; margin: 12px 0 4px; }
-button.small { width: auto; padding: 6px 12px; }
-.msgs { height: 320px; overflow-y: auto; background: #f7f7fb; border-radius: 8px; padding: 10px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
-.bubble { max-width: 80%; padding: 8px 10px; border-radius: 12px; font-size: 14px; word-break: break-word; white-space: pre-wrap; }
-.bubble.mine { align-self: flex-end; background: #5b2a86; color: #fff; }
-.bubble.theirs { align-self: flex-start; background: #fff; border: 1px solid #ddd; }
-.bubble.bad { font-style: italic; opacity: .7; }
-.bubble small { display: block; font-size: 11px; opacity: .7; margin-top: 2px; }
-.empty { color: #888; text-align: center; font-size: 14px; margin: auto; }
-h3 { font-size: 14px; margin: 0 0 6px; color: #5b2a86; }
-.section { margin: 16px 0; }
-.contact { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #eee; gap: 8px; }
+.row button { width: auto; padding: 9px 16px; }
+
+.msg { color: #b00020; font-size: 13px; margin: 8px 0 0; }
+.hint { font-size: 13px; color: #666; }
+.muted { color: #777; font-size: 12px; }
+.muted-light { color: #e3d6f3; font-size: 12px; font-weight: normal; }
+.center { text-align: center; }
+.switch { font-size: 14px; text-align: center; }
+.empty { color: #888; text-align: center; font-size: 13px; margin: 8px 0; }
+
+.ok { background: #e8f5e9; padding: 12px; border-radius: 6px; margin: 12px 0; font-size: 14px; }
+.warn { background: #fff4e5; padding: 12px; border-radius: 6px; margin: 12px 0; font-size: 14px; }
+.ok p, .warn p { margin: 6px 0; }
+.fp { display: block; font-family: monospace; font-size: 13px; word-break: break-word; margin: 4px 0; }
+
+/* ---- Window frame ---- */
+.window { background: #fff; border: 1px solid var(--purple-dark); border-radius: 8px 8px 4px 4px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+.titlebar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: linear-gradient(#8e4fc4, #5a2290); color: #fff; font-weight: bold; }
+.profilebar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--purple-soft); border-bottom: 1px solid var(--line); }
+.profilebar .name { flex: 1; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wbody { padding: 12px; }
+.footer { padding: 0 12px 12px; }
+
+button.icon { width: auto; background: none; color: inherit; padding: 4px 6px; font-size: 16px; }
+button.icon:hover:not(:disabled) { background: var(--line); }
+
+/* ---- Buddy list ---- */
+.section { margin: 14px 0; }
+button.group { background: none; color: var(--purple); font-weight: bold; text-align: left; padding: 6px 0 4px; border-radius: 0; border-bottom: 1px solid var(--line); margin-top: 6px; }
+button.group:hover:not(:disabled) { background: none; color: var(--purple-dark); }
+.contact { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 0; }
 .actions { display: flex; gap: 6px; }
-.contact .secondary, .actions .secondary { margin-top: 0; }
-button.linklike { width: auto; background: none; color: #222; padding: 4px 0; text-align: left; flex: 1; }
-button.linklike:disabled { color: #999; cursor: not-allowed; }
+button.linklike { width: auto; flex: 1; background: none; color: #222; text-align: left; padding: 6px 0; }
+button.linklike:hover:not(:disabled) { background: none; color: var(--purple); }
+button.linklike:disabled { color: #999; }
+.contact.offline button.linklike { color: #888; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #bbb; margin-right: 6px; }
 .dot.on { background: #2ecc71; }
+.dot.busy { background: #e53935; }
 .badge { background: #e53935; color: #fff; border-radius: 10px; font-size: 11px; padding: 1px 7px; margin-left: 8px; }
+.tag { font-size: 11px; color: #b03030; margin-left: 6px; }
+
+/* ---- Chat ---- */
+.chat-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.chat-head strong { flex: 1; }
+.fpbox { font-size: 12px; color: #555; margin: 4px 0; }
+.fpbox summary { cursor: pointer; }
+.log { height: 300px; overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin: 8px 0; font-size: 13px; line-height: 1.45; word-break: break-word; white-space: pre-wrap; }
+.line { margin: 2px 0; }
+.line.system { color: #777; font-style: italic; }
+.nick { font-weight: bold; }
+.nick.me { color: #c0392b; }
+.nick.them { color: #1f5fbf; }
+.log time { color: #999; font-size: 11px; margin-left: 6px; }
+.bad { color: #888; }
+
+.toolbar { display: flex; gap: 6px; margin-bottom: 6px; }
+.toolbar button { width: auto; padding: 5px 10px; font-size: 13px; background: var(--purple-soft); color: var(--purple-dark); border: 1px solid var(--line); }
+.toolbar button:hover:not(:disabled) { background: var(--line); }
+
+.picker { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px; margin-bottom: 6px; }
+button.emo { background: none; padding: 4px; font-size: 20px; line-height: 1.2; border-radius: 4px; }
+button.emo:hover:not(:disabled) { background: var(--purple-soft); }
+
+/* ---- Buzz ---- */
+.window.shake { animation: shake .6s; }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-9px); }
+  20%, 40%, 60%, 80% { transform: translateX(9px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .window.shake { animation: none; outline: 3px solid var(--purple); }
+}

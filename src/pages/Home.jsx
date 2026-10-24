@@ -4,9 +4,25 @@ import { ensureIdentity, resetIdentity } from '../crypto/identity'
 import { loadKeyPair } from '../crypto/keys'
 import { useContacts } from '../lib/useContacts'
 import { usePresence } from '../lib/usePresence'
+import { isMuted, setMuted, playMessage } from '../lib/sounds'
 import UsernameForm from '../components/UsernameForm'
 import ContactList from '../components/ContactList'
 import Chat from '../components/Chat'
+
+const STATUSES = [
+  { value: 'available', label: '🟢 Available' },
+  { value: 'busy', label: '🔴 Busy' },
+  { value: 'invisible', label: '⚪ Invisible' },
+]
+
+function loadStatus(userId) {
+  try {
+    const s = localStorage.getItem(`status:${userId}`)
+    return STATUSES.some((x) => x.value === s) ? s : 'available'
+  } catch {
+    return 'available'
+  }
+}
 
 // "Last message I've read" per contact, kept on this device only
 const readKey = (userId) => `lastread:${userId}`
@@ -47,11 +63,15 @@ export default function Home({ session }) {
   const [error, setError] = useState('')
   const [contact, setContact] = useState(null)
   const [unread, setUnread] = useState({})
+  const [status, setStatus] = useState(() => loadStatus(userId))
+  const [muted, setMutedState] = useState(isMuted)
+  const [shaking, setShaking] = useState(false)
   const openRef = useRef(null)
+  const shakeTimer = useRef(null)
 
   const ready = identity?.status === 'ok' && !!username
   const { friends, incoming, outgoing, error: contactsError, reload } = useContacts(userId, ready)
-  const online = usePresence(userId, ready)
+  const online = usePresence(userId, ready, status)
 
   function apply(r) {
     setIdentity(r.identity)
@@ -74,7 +94,29 @@ export default function Home({ session }) {
     openRef.current = contact?.id ?? null
   }, [contact])
 
-  // Mark messages up to msgId as read for this contact
+  useEffect(() => () => clearTimeout(shakeTimer.current), [])
+
+  const shake = useCallback(() => {
+    setShaking(true)
+    clearTimeout(shakeTimer.current)
+    shakeTimer.current = setTimeout(() => setShaking(false), 700)
+  }, [])
+
+  function changeStatus(value) {
+    setStatus(value)
+    try {
+      localStorage.setItem(`status:${userId}`, value)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function toggleMute() {
+    const next = !muted
+    setMuted(next)
+    setMutedState(next)
+  }
+
   const markRead = useCallback(
     (contactId, msgId) => {
       const map = readMap(userId)
@@ -130,6 +172,7 @@ export default function Home({ session }) {
           const sender = payload.new.sender_id
           if (openRef.current === sender) return
           setUnread((prev) => ({ ...prev, [sender]: (prev[sender] || 0) + 1 }))
+          playMessage()
         }
       )
       .subscribe()
@@ -138,7 +181,6 @@ export default function Home({ session }) {
     }
   }, [ready, userId])
 
-  // Show the unread total in the browser tab title
   const totalUnread = friends.reduce((n, f) => n + (unread[f.id] || 0), 0)
   useEffect(() => {
     document.title = totalUnread ? `(${totalUnread}) Messenger` : 'Messenger'
@@ -158,67 +200,94 @@ export default function Home({ session }) {
     }
   }
 
+  const myDot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
+
   return (
-    <div className="card">
-      <h1>Messenger</h1>
-      <p className="who">
-        Signed in as {username ? `@${username}` : session.user.email}
-      </p>
+    <div className={`window ${shaking ? 'shake' : ''}`}>
+      <div className="titlebar">
+        <span>💬 Messenger</span>
+        <span className="muted-light">end-to-end encrypted</span>
+      </div>
 
-      {error && <p className="msg">Error: {error}</p>}
-      {contactsError && <p className="msg">Contacts error: {contactsError}</p>}
-      {!identity && !error && <p>Setting up encryption keys...</p>}
+      <div className="profilebar">
+        <span className={`dot ${myDot}`} />
+        <span className="name">{username ? `@${username}` : session.user.email}</span>
+        {ready && (
+          <select value={status} onChange={(e) => changeStatus(e.target.value)}>
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        )}
+        <button
+          className="icon"
+          onClick={toggleMute}
+          title={muted ? 'Sounds off' : 'Sounds on'}
+        >
+          {muted ? '🔇' : '🔊'}
+        </button>
+      </div>
 
-      {identity?.status === 'conflict' && (
-        <div className="warn">
-          <strong>This device doesn't have your encryption key</strong>
-          <p>
-            Your account already has a key from another device (or this browser's
-            data was cleared). You can create new keys here, but old messages will
-            become unreadable.
-          </p>
-          <button onClick={handleReset}>Create new keys on this device</button>
-        </div>
-      )}
+      <div className="wbody">
+        {error && <p className="msg">Error: {error}</p>}
+        {contactsError && <p className="msg">Contacts error: {contactsError}</p>}
+        {!identity && !error && <p>Setting up encryption keys...</p>}
 
-      {identity?.status === 'ok' && username === null && (
-        <UsernameForm userId={userId} onSaved={setUsername} />
-      )}
-
-      {ready && !contact && (
-        <div>
-          <ContactList
-            myId={userId}
-            friends={friends}
-            incoming={incoming}
-            outgoing={outgoing}
-            online={online}
-            unread={unread}
-            onOpen={setContact}
-            reload={reload}
-          />
-          <div className="ok">
-            <strong>Your key fingerprint</strong>
-            <code className="fp">{identity.fingerprint}</code>
+        {identity?.status === 'conflict' && (
+          <div className="warn">
+            <strong>This device doesn't have your encryption key</strong>
+            <p>
+              Your account already has a key from another device (or this browser's
+              data was cleared). You can create new keys here, but old messages will
+              become unreadable.
+            </p>
+            <button onClick={handleReset}>Create new keys on this device</button>
           </div>
-        </div>
-      )}
+        )}
 
-      {ready && contact && privateKey && (
-        <Chat
-          key={contact.id}
-          myId={userId}
-          myPrivateKey={privateKey}
-          contact={contact}
-          online={online.has(contact.id)}
-          onSeen={(id) => markRead(contact.id, id)}
-          onClose={() => setContact(null)}
-        />
-      )}
+        {identity?.status === 'ok' && username === null && (
+          <UsernameForm userId={userId} onSaved={setUsername} />
+        )}
 
-      <button className="secondary" onClick={() => supabase.auth.signOut()}>
-        Log out
-      </button>
+        {ready && !contact && (
+          <div>
+            <ContactList
+              myId={userId}
+              friends={friends}
+              incoming={incoming}
+              outgoing={outgoing}
+              online={online}
+              unread={unread}
+              onOpen={setContact}
+              reload={reload}
+            />
+            <div className="ok">
+              <strong>Your key fingerprint</strong>
+              <code className="fp">{identity.fingerprint}</code>
+            </div>
+          </div>
+        )}
+
+        {ready && contact && privateKey && (
+          <Chat
+            key={contact.id}
+            myId={userId}
+            myName={username}
+            myPrivateKey={privateKey}
+            contact={contact}
+            status={online.get(contact.id)}
+            onSeen={(id) => markRead(contact.id, id)}
+            onBuzz={shake}
+            onClose={() => setContact(null)}
+          />
+        )}
+      </div>
+
+      <div className="footer">
+        <button className="secondary" onClick={() => supabase.auth.signOut()}>
+          Log out
+        </button>
+      </div>
     </div>
   )
 }

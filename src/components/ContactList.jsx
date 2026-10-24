@@ -1,12 +1,40 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
+function FriendRow({ f, status, unread, onOpen, onRemove }) {
+  const dot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
+  return (
+    <div className={`contact ${status ? '' : 'offline'}`}>
+      <button
+        className="linklike"
+        onClick={() => onOpen(f)}
+        disabled={!f.public_key}
+        title={f.public_key ? '' : "This user hasn't set up encryption yet"}
+      >
+        <span className={`dot ${dot}`} />
+        @{f.username}
+        {status === 'busy' && <span className="tag">busy</span>}
+        {unread > 0 && <span className="badge">{unread}</span>}
+      </button>
+      <button className="small secondary" title="Remove friend" onClick={() => onRemove(f)}>
+        ✕
+      </button>
+    </div>
+  )
+}
+
 export default function ContactList({
   myId, friends, incoming, outgoing, online, unread, onOpen, reload,
 }) {
   const [name, setName] = useState('')
   const [msg, setMsg] = useState('')
   const [info, setInfo] = useState('')
+  const [collapsed, setCollapsed] = useState({ online: false, offline: false })
+
+  const toggle = (k) => setCollapsed((c) => ({ ...c, [k]: !c[k] }))
+  const byName = (a, b) => a.username.localeCompare(b.username)
+  const onlineFriends = friends.filter((f) => online.has(f.id)).sort(byName)
+  const offlineFriends = friends.filter((f) => !online.has(f.id)).sort(byName)
 
   async function addFriend(e) {
     e.preventDefault()
@@ -32,7 +60,7 @@ export default function ContactList({
     if (err2) {
       return setMsg(
         err2.code === '23505'
-          ? 'A request already exists, or you are already friends. Check "Requests" below.'
+          ? 'A request already exists, or you are already friends.'
           : err2.message
       )
     }
@@ -57,11 +85,7 @@ export default function ContactList({
     reload()
   }
 
-  const sorted = [...friends].sort(
-    (a, b) =>
-      Number(online.has(b.id)) - Number(online.has(a.id)) ||
-      a.username.localeCompare(b.username)
-  )
+  const removeFriend = (f) => remove(f, `Remove @${f.username} from your friends?`)
 
   return (
     <div>
@@ -94,28 +118,37 @@ export default function ContactList({
       )}
 
       <div className="section">
-        <h3>Friends ({friends.length})</h3>
+        <button className="group" onClick={() => toggle('online')}>
+          {collapsed.online ? '▸' : '▾'} Online ({onlineFriends.length})
+        </button>
+        {!collapsed.online &&
+          onlineFriends.map((f) => (
+            <FriendRow
+              key={f.rowId}
+              f={f}
+              status={online.get(f.id)}
+              unread={unread[f.id]}
+              onOpen={onOpen}
+              onRemove={removeFriend}
+            />
+          ))}
+
+        <button className="group" onClick={() => toggle('offline')}>
+          {collapsed.offline ? '▸' : '▾'} Offline ({offlineFriends.length})
+        </button>
+        {!collapsed.offline &&
+          offlineFriends.map((f) => (
+            <FriendRow
+              key={f.rowId}
+              f={f}
+              status={null}
+              unread={unread[f.id]}
+              onOpen={onOpen}
+              onRemove={removeFriend}
+            />
+          ))}
+
         {friends.length === 0 && <p className="empty">No friends yet. Add someone above.</p>}
-        {sorted.map((f) => (
-          <div className="contact" key={f.rowId}>
-            <button
-              className="linklike"
-              onClick={() => onOpen(f)}
-              disabled={!f.public_key}
-              title={f.public_key ? '' : "This user hasn't set up encryption yet"}
-            >
-              <span className={`dot ${online.has(f.id) ? 'on' : ''}`} />
-              @{f.username}
-              {unread[f.id] > 0 && <span className="badge">{unread[f.id]}</span>}
-            </button>
-            <button
-              className="small secondary"
-              onClick={() => remove(f, `Remove @${f.username} from your friends?`)}
-            >
-              Remove
-            </button>
-          </div>
-        ))}
       </div>
 
       {outgoing.length > 0 && (
