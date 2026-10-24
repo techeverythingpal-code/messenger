@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { ensureIdentity, resetIdentity } from '../crypto/identity'
+import { runSelfTest } from '../crypto/selftest'
 
 export default function Home({ session }) {
   const userId = session.user.id
   const [identity, setIdentity] = useState(null)
   const [error, setError] = useState('')
+  const [tests, setTests] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -57,6 +59,17 @@ export default function Home({ session }) {
           <button onClick={handleReset}>Create new keys on this device</button>
         </div>
       )}
+
+      <button style={{ marginTop: 12 }} onClick={async () => setTests(await runSelfTest())}>
+  Run encryption self-test
+</button>
+{tests && (
+  <ul className="tests">
+    {tests.map((t) => (
+      <li key={t.name}>{t.ok ? '✅' : '❌'} {t.name}</li>
+    ))}
+  </ul>
+)}
 
       <button style={{ marginTop: 12 }} onClick={() => supabase.auth.signOut()}>
         Log out

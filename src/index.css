@@ -20,3 +20,4 @@ button:disabled { opacity: .6; }
 .warn { background: #fff4e5; padding: 12px; border-radius: 6px; margin: 12px 0; }
 .ok p, .warn p { margin: 6px 0; font-size: 14px; }
 .fp { display: block; font-family: monospace; font-size: 13px; word-break: break-word; }
+.tests { font-size: 13px; padding-left: 18px; }
