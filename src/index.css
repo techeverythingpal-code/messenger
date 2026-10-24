@@ -16,3 +16,7 @@ button:disabled { opacity: .6; }
 .msg { color: #b00020; font-size: 14px; }
 .switch { font-size: 14px; text-align: center; }
 .center { text-align: center; }
+.ok { background: #e8f5e9; padding: 12px; border-radius: 6px; margin: 12px 0; }
+.warn { background: #fff4e5; padding: 12px; border-radius: 6px; margin: 12px 0; }
+.ok p, .warn p { margin: 6px 0; font-size: 14px; }
+.fp { display: block; font-family: monospace; font-size: 13px; word-break: break-word; }
