@@ -112,3 +112,12 @@ button.emo:hover:not(:disabled) { background: var(--purple-soft); }
 @media (prefers-reduced-motion: reduce) {
   .window.shake { animation: none; outline: 3px solid var(--purple); }
 }
+
+.dangerzone { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+button.linkdanger { width: auto; background: none; color: #b00020; padding: 4px 0; font-size: 13px; text-decoration: underline; }
+button.linkdanger:hover:not(:disabled) { background: none; color: #7f0017; }
+.dangerbox { background: #fdecea; border: 1px solid #f5c2c0; border-radius: 6px; padding: 12px; font-size: 13px; }
+.dangerbox ul { margin: 6px 0 10px; padding-left: 18px; }
+.dangerbox .row button { flex: 1; }
+button.danger { background: #c62828; }
+button.danger:hover:not(:disabled) { background: #8e0000; }

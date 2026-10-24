@@ -8,6 +8,7 @@ import { isMuted, setMuted, playMessage } from '../lib/sounds'
 import UsernameForm from '../components/UsernameForm'
 import ContactList from '../components/ContactList'
 import Chat from '../components/Chat'
+import DeleteAccount from '../components/DeleteAccount'
 
 const STATUSES = [
   { value: 'available', label: '🟢 Available' },
@@ -283,11 +284,12 @@ export default function Home({ session }) {
         )}
       </div>
 
-      <div className="footer">
+          <div className="footer">
         <button className="secondary" onClick={() => supabase.auth.signOut()}>
           Log out
         </button>
-      </div>
+        <DeleteAccount userId={userId} email={session.user.email} />
+      </div>       
     </div>
   )
 }

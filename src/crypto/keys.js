@@ -63,3 +63,17 @@ export async function fingerprint(jwk) {
     .join('')
   return hex.slice(0, 32).match(/.{4}/g).join(' ')
 }
+
+async function idbDelete(key) {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite')
+    tx.objectStore(STORE).delete(key)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+export function deleteKeyPair(userId) {
+  return idbDelete(keyName(userId))
+}
