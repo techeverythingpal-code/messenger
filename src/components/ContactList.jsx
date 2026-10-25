@@ -8,8 +8,7 @@ function FriendRow({ f, status, unread, onOpen, onRemove }) {
       <button
         className="linklike"
         onClick={() => onOpen(f)}
-        disabled={!f.public_key}
-        title={f.public_key ? '' : "This user hasn't set up encryption yet"}
+        
       >
         <span className={`dot ${dot}`} />
         @{f.username}

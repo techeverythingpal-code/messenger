@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { ensureIdentity, resetIdentity } from '../crypto/identity'
-import { loadKeyPair } from '../crypto/keys'
+import { ensureDevice } from '../crypto/identity'
+import { deleteKeyPair } from '../crypto/keys'
 import { useContacts } from '../lib/useContacts'
 import { usePresence } from '../lib/usePresence'
 import { isMuted, setMuted, playMessage } from '../lib/sounds'
@@ -42,24 +42,22 @@ function writeMap(userId, map) {
   }
 }
 
-async function loadAll(userId, identity) {
-  if (identity.status !== 'ok') {
-    return { identity, privateKey: null, username: undefined }
-  }
-  const pair = await loadKeyPair(userId)
+async function loadEverything(userId) {
+  const device = await ensureDevice(userId)
+  if (device.status !== 'ok') return { device, username: undefined }
+
   const { data, error } = await supabase
     .from('profiles')
     .select('username')
     .eq('id', userId)
     .single()
   if (error) throw error
-  return { identity, privateKey: pair.privateKey, username: data.username }
+  return { device, username: data.username }
 }
 
 export default function Home({ session }) {
   const userId = session.user.id
-  const [identity, setIdentity] = useState(null)
-  const [privateKey, setPrivateKey] = useState(null)
+  const [device, setDevice] = useState(null) // null = loading
   const [username, setUsername] = useState(undefined) // undefined = loading, null = not chosen
   const [error, setError] = useState('')
   const [contact, setContact] = useState(null)
@@ -70,20 +68,19 @@ export default function Home({ session }) {
   const openRef = useRef(null)
   const shakeTimer = useRef(null)
 
-  const ready = identity?.status === 'ok' && !!username
+  const deviceId = device?.status === 'ok' ? device.deviceId : null
+  const ready = !!deviceId && !!username
   const { friends, incoming, outgoing, error: contactsError, reload } = useContacts(userId, ready)
   const online = usePresence(userId, ready, status)
 
   function apply(r) {
-    setIdentity(r.identity)
-    setPrivateKey(r.privateKey)
+    setDevice(r.device)
     setUsername(r.username)
   }
 
   useEffect(() => {
     let cancelled = false
-    ensureIdentity(userId)
-      .then((id) => loadAll(userId, id))
+    loadEverything(userId)
       .then((r) => !cancelled && apply(r))
       .catch((e) => !cancelled && setError(e.message))
     return () => {
@@ -130,14 +127,15 @@ export default function Home({ session }) {
     [userId]
   )
 
-  // Count unread messages on startup
+  // Count unread messages on startup (copies addressed to this device)
   useEffect(() => {
     if (!ready) return
     let cancelled = false
     supabase
       .from('messages')
       .select('id, sender_id')
-      .eq('receiver_id', userId)
+      .eq('target_device', deviceId)
+      .neq('sender_id', userId)
       .order('id', { ascending: false })
       .limit(500)
       .then(({ data }) => {
@@ -154,23 +152,24 @@ export default function Home({ session }) {
     return () => {
       cancelled = true
     }
-  }, [ready, userId])
+  }, [ready, userId, deviceId])
 
   // New messages from people whose chat isn't open
   useEffect(() => {
     if (!ready) return
     const channel = supabase
-      .channel(`inbox:${userId}`)
+      .channel(`inbox:${deviceId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `receiver_id=eq.${userId}`,
+          filter: `target_device=eq.${deviceId}`,
         },
         (payload) => {
           const sender = payload.new.sender_id
+          if (sender === userId) return // sent from another device of mine
           if (openRef.current === sender) return
           setUnread((prev) => ({ ...prev, [sender]: (prev[sender] || 0) + 1 }))
           playMessage()
@@ -180,22 +179,18 @@ export default function Home({ session }) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [ready, userId])
+  }, [ready, userId, deviceId])
 
   const totalUnread = friends.reduce((n, f) => n + (unread[f.id] || 0), 0)
   useEffect(() => {
     document.title = totalUnread ? `(${totalUnread}) Messenger` : 'Messenger'
   }, [totalUnread])
 
-  async function handleReset() {
-    const ok = window.confirm(
-      'Create new encryption keys on this device?\n\n' +
-        'Messages encrypted with your old keys will become unreadable.'
-    )
-    if (!ok) return
+  async function handleReregister() {
+    setError('')
     try {
-      const id = await resetIdentity(userId)
-      apply(await loadAll(userId, id))
+      await deleteKeyPair(userId)
+      apply(await loadEverything(userId))
     } catch (e) {
       setError(e.message)
     }
@@ -232,21 +227,20 @@ export default function Home({ session }) {
       <div className="wbody">
         {error && <p className="msg">Error: {error}</p>}
         {contactsError && <p className="msg">Contacts error: {contactsError}</p>}
-        {!identity && !error && <p>Setting up encryption keys...</p>}
+        {!device && !error && <p>Setting up this device...</p>}
 
-        {identity?.status === 'conflict' && (
+        {device?.status === 'removed' && (
           <div className="warn">
-            <strong>This device doesn't have your encryption key</strong>
+            <strong>This device was removed from your account</strong>
             <p>
-              Your account already has a key from another device (or this browser's
-              data was cleared). You can create new keys here, but old messages will
-              become unreadable.
+              Its encryption key is no longer registered. You can register this
+              device again, but messages from before can't be read here.
             </p>
-            <button onClick={handleReset}>Create new keys on this device</button>
+            <button onClick={handleReregister}>Register this device again</button>
           </div>
         )}
 
-        {identity?.status === 'ok' && username === null && (
+        {deviceId && username === null && (
           <UsernameForm userId={userId} onSaved={setUsername} />
         )}
 
@@ -263,18 +257,19 @@ export default function Home({ session }) {
               reload={reload}
             />
             <div className="ok">
-              <strong>Your key fingerprint</strong>
-              <code className="fp">{identity.fingerprint}</code>
+              <strong>This device: {device.name}</strong>
+              <code className="fp">{device.fingerprint}</code>
             </div>
           </div>
         )}
 
-        {ready && contact && privateKey && (
+        {ready && contact && (
           <Chat
             key={contact.id}
             myId={userId}
             myName={username}
-            myPrivateKey={privateKey}
+            deviceId={deviceId}
+            myPrivateKey={device.privateKey}
             contact={contact}
             status={online.get(contact.id)}
             expireAfter={friends.find((f) => f.id === contact.id)?.expireAfter ?? null}
@@ -286,12 +281,12 @@ export default function Home({ session }) {
         )}
       </div>
 
-          <div className="footer">
+      <div className="footer">
         <button className="secondary" onClick={() => supabase.auth.signOut()}>
           Log out
         </button>
         <DeleteAccount userId={userId} email={session.user.email} />
-      </div>       
+      </div>
     </div>
   )
 }

@@ -22,7 +22,7 @@ export function fromB64(b64) {
 
 // ---------- shared key ----------
 function importPublicKey(jwk) {
-  // Only keep the fields we need; never trust extra fields from the server
+  // Keep only the fields we need; never trust extra fields from the server
   return crypto.subtle.importKey(
     'jwk',
     { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y },
@@ -32,7 +32,7 @@ function importPublicKey(jwk) {
   )
 }
 
-// Cache: my private key -> (peer public key -> AES key)
+// Cache: my private key -> (other device's public key -> AES key)
 const cache = new WeakMap()
 
 export async function getSharedKey(myPrivateKey, theirPublicJwk) {
@@ -45,15 +45,12 @@ export async function getSharedKey(myPrivateKey, theirPublicJwk) {
   if (perPeer.has(id)) return perPeer.get(id)
 
   const theirKey = await importPublicKey(theirPublicJwk)
-
   const bits = await crypto.subtle.deriveBits(
     { name: 'ECDH', public: theirKey },
     myPrivateKey,
     256
   )
-
   const hkdfKey = await crypto.subtle.importKey('raw', bits, 'HKDF', false, ['deriveKey'])
-
   const aesKey = await crypto.subtle.deriveKey(
     {
       name: 'HKDF',
@@ -71,13 +68,18 @@ export async function getSharedKey(myPrivateKey, theirPublicJwk) {
   return aesKey
 }
 
-const aad = (senderId, receiverId) => enc.encode(`${senderId}>${receiverId}`)
+// Binds every copy to its message, both people and both devices, so a copy
+// can't be moved to another message, conversation or device.
+const aad = (m) =>
+  enc.encode(
+    ['v2', m.msgId, m.senderId, m.receiverId, m.senderDevice, m.targetDevice].join('|')
+  )
 
 // ---------- encrypt / decrypt ----------
-// "theirPublicJwk" is always the OTHER person's public key:
-//  - when sending: the receiver's key
-//  - when reading a received message: the sender's key
-export async function encryptMessage(myPrivateKey, theirPublicJwk, senderId, receiverId, text) {
+// theirPublicJwk: the public key of the OTHER device
+//  - when encrypting: the target device's key
+//  - when decrypting: the sender device's key
+export async function encryptMessage(myPrivateKey, theirPublicJwk, meta, text) {
   if (typeof text !== 'string' || text.trim().length === 0) {
     throw new Error('Message is empty')
   }
@@ -87,28 +89,20 @@ export async function encryptMessage(myPrivateKey, theirPublicJwk, senderId, rec
 
   const key = await getSharedKey(myPrivateKey, theirPublicJwk)
   const iv = crypto.getRandomValues(new Uint8Array(12))
-
   const ct = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: aad(senderId, receiverId) },
+    { name: 'AES-GCM', iv, additionalData: aad(meta) },
     key,
     enc.encode(text)
   )
-
   return { ciphertext: toB64(new Uint8Array(ct)), iv: toB64(iv) }
 }
 
 // Returns the text, or null if it can't be decrypted or was tampered with
-export async function decryptMessage(
-  myPrivateKey,
-  theirPublicJwk,
-  senderId,
-  receiverId,
-  { ciphertext, iv }
-) {
+export async function decryptMessage(myPrivateKey, theirPublicJwk, meta, { ciphertext, iv }) {
   try {
     const key = await getSharedKey(myPrivateKey, theirPublicJwk)
     const plain = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: fromB64(iv), additionalData: aad(senderId, receiverId) },
+      { name: 'AES-GCM', iv: fromB64(iv), additionalData: aad(meta) },
       key,
       fromB64(ciphertext)
     )
@@ -116,4 +110,33 @@ export async function decryptMessage(
   } catch {
     return null
   }
+}
+
+// One message -> one encrypted copy per device (friend's devices + my own devices)
+export async function buildCopies({ myPrivateKey, myId, myDeviceId, friendId, devices, text }) {
+  if (!devices.length) throw new Error('No devices to encrypt for')
+
+  const msgId = crypto.randomUUID()
+  const rows = []
+  for (const d of devices) {
+    const meta = {
+      msgId,
+      senderId: myId,
+      receiverId: friendId,
+      senderDevice: myDeviceId,
+      targetDevice: d.id,
+    }
+    const { ciphertext, iv } = await encryptMessage(myPrivateKey, d.public_key, meta, text)
+    rows.push({
+      msg_id: msgId,
+      sender_id: myId,
+      receiver_id: friendId,
+      sender_device: myDeviceId,
+      target_device: d.id,
+      target_user: d.user_id,
+      ciphertext,
+      iv,
+    })
+  }
+  return { msgId, rows }
 }

@@ -18,7 +18,7 @@ export function useContacts(userId, enabled) {
     if (ids.length) {
       const res = await supabase
         .from('profiles')
-        .select('id, username, public_key')
+        .select('id, username')
         .in('id', ids)
       if (res.error) return setError(res.error.message)
       profiles = res.data

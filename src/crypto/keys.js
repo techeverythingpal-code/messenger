@@ -29,41 +29,6 @@ async function idbSet(key, value) {
   })
 }
 
-// Keys are stored per user, so two accounts in one browser don't collide
-const keyName = (userId) => `identity:${userId}`
-
-export function loadKeyPair(userId) {
-  return idbGet(keyName(userId))
-}
-
-export async function createKeyPair(userId) {
-  const pair = await crypto.subtle.generateKey(
-    { name: 'ECDH', namedCurve: 'P-256' },
-    false, // private key can NOT be exported
-    ['deriveKey', 'deriveBits']
-  )
-  await idbSet(keyName(userId), pair)
-  return pair
-}
-
-export function exportPublicJwk(publicKey) {
-  return crypto.subtle.exportKey('jwk', publicKey)
-}
-
-export function sameKey(a, b) {
-  return !!a && !!b && a.crv === b.crv && a.x === b.x && a.y === b.y
-}
-
-// Short human-readable fingerprint, used later to verify a contact
-export async function fingerprint(jwk) {
-  const canon = JSON.stringify({ crv: jwk.crv, kty: jwk.kty, x: jwk.x, y: jwk.y })
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canon))
-  const hex = [...new Uint8Array(hash)]
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-  return hex.slice(0, 32).match(/.{4}/g).join(' ')
-}
-
 async function idbDelete(key) {
   const db = await openDB()
   return new Promise((resolve, reject) => {
@@ -74,6 +39,42 @@ async function idbDelete(key) {
   })
 }
 
-export function deleteKeyPair(userId) {
-  return idbDelete(keyName(userId))
+const deviceKey = (userId) => `device:${userId}`
+const oldKey = (userId) => `identity:${userId}` // the single-key format used before multi-device
+
+// This device's record: { deviceId, privateKey, publicKey }
+export const loadDevice = (userId) => idbGet(deviceKey(userId))
+export const saveDevice = (userId, record) => idbSet(deviceKey(userId), record)
+export const deleteOldIdentity = (userId) => idbDelete(oldKey(userId))
+
+// Erases this device's keys (used by "delete account" and "register again")
+export async function deleteKeyPair(userId) {
+  await idbDelete(deviceKey(userId))
+  await idbDelete(oldKey(userId))
+}
+
+export function generateKeyPair() {
+  return crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false, // the private key can NOT be exported
+    ['deriveKey', 'deriveBits']
+  )
+}
+
+export function exportPublicJwk(publicKey) {
+  return crypto.subtle.exportKey('jwk', publicKey)
+}
+
+export function sameKey(a, b) {
+  return !!a && !!b && a.crv === b.crv && a.x === b.x && a.y === b.y
+}
+
+// Short human-readable fingerprint, used to verify a contact's device
+export async function fingerprint(jwk) {
+  const canon = JSON.stringify({ crv: jwk.crv, kty: jwk.kty, x: jwk.x, y: jwk.y })
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canon))
+  const hex = [...new Uint8Array(hash)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  return hex.slice(0, 32).match(/.{4}/g).join(' ')
 }
