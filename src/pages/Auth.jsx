@@ -37,7 +37,7 @@ export default function Auth() {
 
   return (
     <div className="card">
-      <h1>Messenger</h1>
+      <h1>MeMe Messenger</h1>
       <h2>{mode === 'login' ? 'Log in' : 'Create account'}</h2>
 
       <form onSubmit={handleSubmit}>
