@@ -8,6 +8,7 @@ import { isMuted, setMuted, playMessage } from '../lib/sounds'
 import UsernameForm from '../components/UsernameForm'
 import ContactList from '../components/ContactList'
 import Chat from '../components/Chat'
+import Devices from '../components/Devices'
 import DeleteAccount from '../components/DeleteAccount'
 
 const STATUSES = [
@@ -42,6 +43,24 @@ function writeMap(userId, map) {
   }
 }
 
+// Which of my devices I have already seen, kept on this device only
+const seenKey = (userId) => `devices-seen:${userId}`
+function readSeen(userId) {
+  try {
+    const v = JSON.parse(localStorage.getItem(seenKey(userId)))
+    return Array.isArray(v) ? v : null
+  } catch {
+    return null
+  }
+}
+function writeSeen(userId, ids) {
+  try {
+    localStorage.setItem(seenKey(userId), JSON.stringify(ids))
+  } catch {
+    /* ignore */
+  }
+}
+
 async function loadEverything(userId) {
   const device = await ensureDevice(userId)
   if (device.status !== 'ok') return { device, username: undefined }
@@ -61,6 +80,8 @@ export default function Home({ session }) {
   const [username, setUsername] = useState(undefined) // undefined = loading, null = not chosen
   const [error, setError] = useState('')
   const [contact, setContact] = useState(null)
+  const [showDevices, setShowDevices] = useState(false)
+  const [alertDevices, setAlertDevices] = useState([]) // devices added that I haven't seen
   const [unread, setUnread] = useState({})
   const [status, setStatus] = useState(() => loadStatus(userId))
   const [muted, setMutedState] = useState(isMuted)
@@ -127,7 +148,74 @@ export default function Home({ session }) {
     [userId]
   )
 
-  // Count unread messages on startup (copies addressed to this device)
+  // ----- New-device alerts (own account) -----
+  useEffect(() => {
+    if (!ready) return
+    let cancelled = false
+
+    // Devices added while this device was closed
+    supabase
+      .from('devices')
+      .select('id, name')
+      .eq('user_id', userId)
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        const seen = readSeen(userId)
+        if (seen === null) {
+          writeSeen(userId, data.map((d) => d.id)) // first run on this device: nothing to compare yet
+          return
+        }
+        const fresh = data.filter((d) => d.id !== deviceId && !seen.includes(d.id))
+        if (fresh.length) setAlertDevices(fresh)
+      })
+
+    // Devices added while this device is open
+    const channel = supabase
+      .channel(`mydevices:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'devices',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          const d = payload.new
+          if (d.id === deviceId) return
+          setAlertDevices((prev) =>
+            prev.some((x) => x.id === d.id) ? prev : [...prev, { id: d.id, name: d.name }]
+          )
+        }
+      )
+      .subscribe()
+
+    return () => {
+      cancelled = true
+      supabase.removeChannel(channel)
+    }
+  }, [ready, userId, deviceId])
+
+  const handleReviewed = useCallback(
+    (ids) => {
+      writeSeen(userId, ids)
+      setAlertDevices([])
+    },
+    [userId]
+  )
+
+  function dismissAlert() {
+    const seen = readSeen(userId) || []
+    writeSeen(userId, [...new Set([...seen, ...alertDevices.map((d) => d.id)])])
+    setAlertDevices([])
+  }
+
+  function openDevices() {
+    setContact(null)
+    setShowDevices(true)
+  }
+
+  // ----- Unread counts -----
   useEffect(() => {
     if (!ready) return
     let cancelled = false
@@ -154,7 +242,6 @@ export default function Home({ session }) {
     }
   }, [ready, userId, deviceId])
 
-  // New messages from people whose chat isn't open
   useEffect(() => {
     if (!ready) return
     const channel = supabase
@@ -186,14 +273,15 @@ export default function Home({ session }) {
     document.title = totalUnread ? `(${totalUnread}) Messenger` : 'Messenger'
   }, [totalUnread])
 
-  async function handleReregister() {
-    setError('')
+  // A removed device can only sign out. Its old key is erased, so the next
+  // login (with the password) registers it fresh.
+  async function handleLeave() {
     try {
       await deleteKeyPair(userId)
-      apply(await loadEverything(userId))
-    } catch (e) {
-      setError(e.message)
+    } catch {
+      /* ignore */
     }
+    await supabase.auth.signOut()
   }
 
   const myDot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
@@ -215,6 +303,11 @@ export default function Home({ session }) {
             ))}
           </select>
         )}
+        {ready && (
+          <button className="icon" onClick={openDevices} title="My devices">
+            💻
+          </button>
+        )}
         <button
           className="icon"
           onClick={toggleMute}
@@ -233,10 +326,26 @@ export default function Home({ session }) {
           <div className="warn">
             <strong>This device was removed from your account</strong>
             <p>
-              Its encryption key is no longer registered. You can register this
-              device again, but messages from before can't be read here.
+              Its encryption key is no longer registered. Sign out, then log in again
+              with your password to use this device again. Messages from before can't
+              be read here.
             </p>
-            <button onClick={handleReregister}>Register this device again</button>
+            <button onClick={handleLeave}>Sign out of this device</button>
+          </div>
+        )}
+
+        {ready && alertDevices.length > 0 && (
+          <div className="warn">
+            <strong>⚠️ New device on your account</strong>
+            <p>
+              {alertDevices.map((d) => d.name).join(', ')}{' '}
+              {alertDevices.length > 1 ? 'were' : 'was'} added. If this wasn't you,
+              remove it and sign out your other devices.
+            </p>
+            <div className="row">
+              <button onClick={openDevices}>Review devices</button>
+              <button className="secondary" onClick={dismissAlert}>It was me</button>
+            </div>
           </div>
         )}
 
@@ -244,7 +353,16 @@ export default function Home({ session }) {
           <UsernameForm userId={userId} onSaved={setUsername} />
         )}
 
-        {ready && !contact && (
+        {ready && showDevices && (
+          <Devices
+            userId={userId}
+            deviceId={deviceId}
+            onReviewed={handleReviewed}
+            onBack={() => setShowDevices(false)}
+          />
+        )}
+
+        {ready && !contact && !showDevices && (
           <div>
             <ContactList
               myId={userId}
@@ -263,7 +381,7 @@ export default function Home({ session }) {
           </div>
         )}
 
-        {ready && contact && (
+        {ready && contact && !showDevices && (
           <Chat
             key={contact.id}
             myId={userId}

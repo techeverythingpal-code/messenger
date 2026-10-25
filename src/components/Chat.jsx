@@ -71,6 +71,7 @@ export default function Chat({
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
+  const [notice, setNotice] = useState('')
   const [now, setNow] = useState(() => Date.now())
 
   const listRef = useRef(null)
@@ -170,9 +171,42 @@ export default function Chat({
       )
       .subscribe()
 
+        // Warn when this contact adds a new device
+    const devChannel = supabase
+      .channel(`contact-devices:${contact.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'devices',
+          filter: `user_id=eq.${contact.id}`,
+        },
+        async (payload) => {
+          const d = payload.new
+          try {
+            const key =
+              typeof d.public_key === 'string' ? JSON.parse(d.public_key) : d.public_key
+            const fp = await fingerprint(key)
+            if (cancelled) return
+            setContactDevices((prev) =>
+              prev.some((x) => x.id === d.id) ? prev : [...prev, { id: d.id, name: d.name, fp }]
+            )
+            setNotice(
+              `@${contact.username} added a new device (${d.name}). ` +
+                'Compare its fingerprint with them before trusting it.'
+            )
+          } catch {
+            /* ignore a malformed device */
+          }
+        }
+      )
+      .subscribe()
+
     return () => {
       cancelled = true
       supabase.removeChannel(channel)
+      supabase.removeChannel(devChannel)
     }
   }, [myId, deviceId, myPrivateKey, contact, dir])
 
@@ -324,6 +358,13 @@ export default function Chat({
           </div>
         )}
       </details>
+
+            {notice && (
+        <div className="warn">
+          <p>⚠️ {notice}</p>
+          <button className="small secondary" onClick={() => setNotice('')}>OK</button>
+        </div>
+      )}
 
       <div className="expiry">
         <label>
