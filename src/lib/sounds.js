@@ -54,5 +54,16 @@ function play(notes, type = 'sine', volume = 0.08) {
 
 export const playMessage = () => play([[880, 0, 0.12], [1175, 0.1, 0.16]])
 
-export const playBuzz = () =>
- play([[90, 0, 0.12], [70, 0.13, 0.12], [90, 0.26, 0.12], [70, 0.39, 0.12], [90, 0.52, 0.12], [70, 0.65, 0.12]], 'square', 0.05)
+let buzzAudio = null
+
+export function playBuzz() {
+  if (isMuted()) return
+  try {
+    if (!buzzAudio) buzzAudio = new Audio('/sounds/buzz.mp3')
+    buzzAudio.currentTime = 0
+    buzzAudio.volume = 0.7
+    buzzAudio.play().catch(() => {})
+  } catch {
+    /* sound is optional */
+  }
+}
