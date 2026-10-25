@@ -289,7 +289,7 @@ export default function Home({ session }) {
   return (
     <div className={`window ${shaking ? 'shake' : ''}`}>
       <div className="titlebar">
-        <span>💬 MeMeMessenger</span>
+        <span>💬 MeMe Messenger</span>
         <span className="muted-light">end-to-end encrypted</span>
       </div>
 
