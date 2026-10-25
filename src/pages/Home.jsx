@@ -11,6 +11,7 @@ import Chat from '../components/Chat'
 import Devices from '../components/Devices'
 import DeleteAccount from '../components/DeleteAccount'
 import { setTabBadge } from '../lib/tabBadge'
+import { pushSupported, pushStatus, enablePush, disablePush, pausePush } from '../lib/push'
 
 const STATUSES = [
   { value: 'available', label: '🟢 Available' },
@@ -87,6 +88,8 @@ export default function Home({ session }) {
   const [status, setStatus] = useState(() => loadStatus(userId))
   const [muted, setMutedState] = useState(isMuted)
   const [shaking, setShaking] = useState(false)
+  const [pushOn, setPushOn] = useState(false)
+  const [pushMsg, setPushMsg] = useState('')
   const openRef = useRef(null)
   const shakeTimer = useRef(null)
 
@@ -115,6 +118,69 @@ export default function Home({ session }) {
   }, [contact])
 
   useEffect(() => () => clearTimeout(shakeTimer.current), [])
+
+    // ----- Notifications -----
+  useEffect(() => {
+    if (!ready) return
+    let cancelled = false
+    pushStatus(userId, deviceId)
+      .then((on) => !cancelled && setPushOn(on))
+      .catch(() => !cancelled && setPushOn(false))
+    return () => {
+      cancelled = true
+    }
+  }, [ready, userId, deviceId])
+
+  async function togglePush() {
+    setPushMsg('')
+    if (!pushSupported()) {
+      setPushMsg(
+        "Notifications aren't available in this browser. On iPhone or iPad, tap Share → " +
+          'Add to Home Screen first, then open the app from the Home Screen.'
+      )
+      return
+    }
+    try {
+      if (pushOn) {
+        await disablePush(userId, deviceId)
+        setPushOn(false)
+        setPushMsg('Notifications are off for this device.')
+      } else {
+        await enablePush(userId, deviceId)
+        setPushOn(true)
+        setPushMsg('Notifications are on for this device.')
+      }
+    } catch (e) {
+      setPushMsg(e.message)
+    }
+  }
+
+  // Open the right chat when a notification is clicked
+  const pendingChat = useRef(new URLSearchParams(window.location.search).get('chat'))
+  useEffect(() => {
+    if (!ready) return
+    function openChat(senderId) {
+      const f = friends.find((x) => x.id === senderId)
+      if (!f) return false
+      setShowDevices(false)
+      setContact(f)
+      return true
+    }
+    if (pendingChat.current && openChat(pendingChat.current)) {
+      pendingChat.current = null
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+    function onMessage(e) {
+      if (e.data?.type === 'open-chat') openChat(e.data.senderId)
+    }
+    navigator.serviceWorker?.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker?.removeEventListener('message', onMessage)
+  }, [ready, friends])
+
+  async function handleLogout() {
+    if (deviceId) await pausePush(deviceId)
+    await supabase.auth.signOut()
+  }
 
   const shake = useCallback(() => {
     setShaking(true)
@@ -309,10 +375,19 @@ export default function Home({ session }) {
             ))}
           </select>
         )}
-        {ready && (
-          <button className="icon" onClick={openDevices} title="My devices">
-            💻
-          </button>
+                {ready && (
+          <>
+            <button
+              className="icon"
+              onClick={togglePush}
+              title={pushOn ? 'Notifications on (click to turn off)' : 'Turn on notifications'}
+            >
+              {pushOn ? '🔔' : '🔕'}
+            </button>
+            <button className="icon" onClick={openDevices} title="My devices">
+              💻
+            </button>
+          </>
         )}
         <button
           className="icon"
@@ -326,6 +401,7 @@ export default function Home({ session }) {
       <div className="wbody">
         {error && <p className="msg">Error: {error}</p>}
         {contactsError && <p className="msg">Contacts error: {contactsError}</p>}
+        {pushMsg && <p className="hint">{pushMsg}</p>}
         {!device && !error && <p>Setting up this device...</p>}
 
         {device?.status === 'removed' && (
@@ -406,7 +482,7 @@ export default function Home({ session }) {
       </div>
 
       <div className="footer">
-        <button className="secondary" onClick={() => supabase.auth.signOut()}>
+        <button className="secondary" onClick={handleLogout}>
           Log out
         </button>
         <DeleteAccount userId={userId} email={session.user.email} />
