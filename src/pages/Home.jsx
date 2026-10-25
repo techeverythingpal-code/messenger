@@ -10,6 +10,7 @@ import ContactList from '../components/ContactList'
 import Chat from '../components/Chat'
 import Devices from '../components/Devices'
 import DeleteAccount from '../components/DeleteAccount'
+import { setTabBadge } from '../lib/tabBadge'
 
 const STATUSES = [
   { value: 'available', label: '🟢 Available' },
@@ -257,9 +258,13 @@ export default function Home({ session }) {
         (payload) => {
           const sender = payload.new.sender_id
           if (sender === userId) return // sent from another device of mine
-          if (openRef.current === sender) return
+
+          const chatOpen = openRef.current === sender
+          // An open chat only counts as read while you can actually see this tab
+          if (chatOpen && !document.hidden) return
+
           setUnread((prev) => ({ ...prev, [sender]: (prev[sender] || 0) + 1 }))
-          playMessage()
+          if (!chatOpen) playMessage() // an open chat plays its own sound
         }
       )
       .subscribe()
@@ -268,9 +273,10 @@ export default function Home({ session }) {
     }
   }, [ready, userId, deviceId])
 
-  const totalUnread = friends.reduce((n, f) => n + (unread[f.id] || 0), 0)
+    const totalUnread = friends.reduce((n, f) => n + (unread[f.id] || 0), 0)
   useEffect(() => {
-    document.title = totalUnread ? `(${totalUnread}) Messenger` : 'Messenger'
+    document.title = totalUnread ? `(${totalUnread}) MeMe Messenger` : 'MeMe Messenger'
+    setTabBadge(totalUnread)
   }, [totalUnread])
 
   // A removed device can only sign out. Its old key is erased, so the next

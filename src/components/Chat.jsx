@@ -215,8 +215,16 @@ export default function Chat({
     if (el) el.scrollTop = el.scrollHeight
   }, [messages])
 
+   // Only mark messages as read while this browser tab is actually visible
   useEffect(() => {
-    if (messages.length) onSeenRef.current(messages[messages.length - 1].id)
+    function markSeen() {
+      if (!document.hidden && messages.length) {
+        onSeenRef.current(messages[messages.length - 1].id)
+      }
+    }
+    markSeen()
+    document.addEventListener('visibilitychange', markSeen)
+    return () => document.removeEventListener('visibilitychange', markSeen)
   }, [messages])
 
   async function sendText(plain) {
