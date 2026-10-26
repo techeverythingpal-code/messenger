@@ -6,6 +6,7 @@ import { fingerprint } from '../crypto/keys'
 import { withEmoticons, PICKER } from '../lib/emoticons'
 import { playMessage, playBuzz } from '../lib/sounds'
 import { vibrateBuzz, vibrateMessage } from '../lib/haptics'
+import { onRefresh } from '../lib/refresh'
 
 // A buzz is an ordinary encrypted message with this reserved text,
 // so the server can't tell a buzz from any other message.
@@ -72,13 +73,14 @@ export default function Chat({
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
-  const [notice, setNotice] = useState('')
   const [now, setNow] = useState(() => Date.now())
+  const [notice, setNotice] = useState('')
 
   const listRef = useRef(null)
   const inputRef = useRef(null)
   const lastBuzzSent = useRef(0)
   const lastBuzzShown = useRef(0)
+  const refreshRef = useRef(() => {})
   const onSeenRef = useRef(onSeen)
   const onBuzzRef = useRef(onBuzz)
   useEffect(() => {
@@ -97,10 +99,15 @@ export default function Chat({
     ? messages.filter((m) => new Date(m.time).getTime() > now - expireAfter * 1000)
     : messages
 
+  // Catch up whenever the app asks (tab shown, back online, notification tapped, timer)
+  useEffect(() => onRefresh(() => refreshRef.current()), [])
+
   useEffect(() => {
     let cancelled = false
+    let hadConnection = false
 
-    async function loadHistory() {
+    // quiet = background catch-ups don't show errors (for example while offline)
+    async function loadHistory(quiet = false) {
       try {
         const devs = await dir.refresh()
         const theirs = await Promise.all(
@@ -127,10 +134,11 @@ export default function Chat({
         )
         if (!cancelled) setMessages((prev) => mergeInto(prev, views))
       } catch (err) {
-        if (!cancelled) setError(err.message)
+        if (!cancelled && !quiet) setError(err.message)
       }
     }
     loadHistory()
+    refreshRef.current = () => loadHistory(true)
 
     // Live copies addressed to THIS device
     const channel = supabase
@@ -155,7 +163,7 @@ export default function Chat({
             setMessages((prev) => mergeInto(prev, [view]))
             if (view.mine) return // sent from another device of mine
 
-                        if (view.buzz) {
+            if (view.buzz) {
               const t = Date.now()
               if (t - lastBuzzShown.current > SHAKE_THROTTLE_MS) {
                 lastBuzzShown.current = t
@@ -172,9 +180,15 @@ export default function Chat({
           }
         }
       )
-      .subscribe()
+      .subscribe((state) => {
+        // After a dropped connection comes back, fetch anything we missed
+        if (state === 'SUBSCRIBED') {
+          if (hadConnection) loadHistory(true)
+          hadConnection = true
+        }
+      })
 
-        // Warn when this contact adds a new device
+    // Warn when this contact adds a new device
     const devChannel = supabase
       .channel(`contact-devices:${contact.id}`)
       .on(
@@ -208,6 +222,7 @@ export default function Chat({
 
     return () => {
       cancelled = true
+      refreshRef.current = () => {}
       supabase.removeChannel(channel)
       supabase.removeChannel(devChannel)
     }
@@ -218,7 +233,7 @@ export default function Chat({
     if (el) el.scrollTop = el.scrollHeight
   }, [messages])
 
-   // Only mark messages as read while this browser tab is actually visible
+  // Only mark messages as read while this browser tab is actually visible
   useEffect(() => {
     function markSeen() {
       if (!document.hidden && messages.length) {
@@ -295,7 +310,6 @@ export default function Chat({
       await sendText(BUZZ_TOKEN)
       lastBuzzSent.current = Date.now()
       vibrateBuzz() // the sender feels it too
-      onBuzzRef.current() //sender’s window to shake
     } catch (err) {
       setError(err.message)
     } finally {
@@ -372,7 +386,7 @@ export default function Chat({
         )}
       </details>
 
-            {notice && (
+      {notice && (
         <div className="warn">
           <p>⚠️ {notice}</p>
           <button className="small secondary" onClick={() => setNotice('')}>OK</button>
