@@ -307,9 +307,11 @@ export default function Chat({
     setSending(true)
     setError('')
     try {
-      await sendText(BUZZ_TOKEN)
+            await sendText(BUZZ_TOKEN)
       lastBuzzSent.current = Date.now()
       vibrateBuzz() // the sender feels it too
+      onBuzzRef.current() // and sees their own window shake
+      playBuzz()
     } catch (err) {
       setError(err.message)
     } finally {
