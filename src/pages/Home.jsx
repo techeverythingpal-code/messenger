@@ -340,6 +340,7 @@ export default function Home({ session }) {
       .select('id, sender_id')
       .eq('target_device', deviceId)
       .neq('sender_id', userId)
+      .eq('kind', 'msg') // reactions are not unread messages
       .order('id', { ascending: false })
       .limit(500)
       .then(({ data }) => {
@@ -390,6 +391,7 @@ export default function Home({ session }) {
         (payload) => {
           const sender = payload.new.sender_id
           if (sender === userId) return // sent from another device of mine
+          if (payload.new.kind === 'react') return // reactions are not new messages
 
           const chatOpen = openRef.current === sender
           // An open chat only counts as read while you can actually see this tab
