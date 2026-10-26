@@ -118,10 +118,10 @@ export default function Auth() {
           required
         />
 
-        {mode !== 'forgot' && (
+        {mode !== 'forgot' || mode === 'login' && (
           <input
             type="password"
-            placeholder=""
+            placeholder="Password (8+ characters)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
