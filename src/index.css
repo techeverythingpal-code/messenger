@@ -129,7 +129,8 @@ button.danger:hover:not(:disabled) { background: #8e0000; }
 .forgot { font-size: 13px; text-align: right; margin: -4px 0 12px; }
 .typing { font-size: 12px; color: #777; font-style: italic; min-height: 16px; margin: -2px 0 6px; }
 .tick { margin-left: 6px; font-size: 11px; color: #999; }
-.tick.seen { color: #1f8fe5; }
+.eyes { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 1px; font-size: 12px; font-style: normal; white-space: normal; color: #1f8fe5; }
+.eyes span { font-size: 11px; color: #777; }
 .toggle { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; font-size: 14px; cursor: pointer; }
 .toggle input { width: auto; margin: 3px 0 0; }
 .toggle small { display: block; color: #777; font-size: 12px; }

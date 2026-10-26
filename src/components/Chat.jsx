@@ -77,6 +77,7 @@ export default function Chat({
   const [now, setNow] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
   const [readUntil, setReadUntil] = useState(null) // when my friend last read my messages
+  const [myReadUntil, setMyReadUntil] = useState(null) // when I last read my friend's messages
 
   const listRef = useRef(null)
   const inputRef = useRef(null)
@@ -109,7 +110,20 @@ export default function Chat({
 
   // Seen ticks only show if I share my own receipts too
   const seenCutoff = shareSeen ? readUntil : null
-  const isSeen = (m) => seenCutoff !== null && new Date(m.time).getTime() <= seenCutoff
+
+  // Teams-style eyes: one 👁 under the last message each of us has read
+  function lastReadId(cutoff, mine) {
+    if (cutoff === null) return null
+    let id = null
+    for (const m of visible) {
+      if (m.mine === mine && new Date(m.time).getTime() <= cutoff) id = m.id
+    }
+    return id
+  }
+  const friendEyeId = lastReadId(seenCutoff, true) // my last message my friend read
+  const myEyeId = lastReadId(shareSeen ? myReadUntil : null, false) // their last message I read
+  const eyeLabel = (m) =>
+    m.id === friendEyeId ? `@${contact.username}` : m.id === myEyeId ? 'You' : null
 
   // Catch up whenever the app asks (tab shown, back online, notification tapped, timer)
   useEffect(() => onRefresh(() => refreshRef.current()), [])
@@ -154,6 +168,15 @@ export default function Chat({
           .eq('peer_id', myId)
           .maybeSingle()
         if (!cancelled) setReadUntil(mark ? new Date(mark.read_until).getTime() : null)
+
+        // When did I last read my friend's messages?
+        const { data: myMark } = await supabase
+          .from('read_marks')
+          .select('read_until')
+          .eq('reader_id', myId)
+          .eq('peer_id', contact.id)
+          .maybeSingle()
+        if (!cancelled) setMyReadUntil(myMark ? new Date(myMark.read_until).getTime() : null)
       } catch (err) {
         if (!cancelled && !quiet) setError(err.message)
       }
@@ -215,6 +238,21 @@ export default function Chat({
           const row = payload.new
           if (row?.peer_id === myId && !cancelled) {
             setReadUntil(new Date(row.read_until).getTime())
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'read_marks',
+          filter: `reader_id=eq.${myId}`,
+        },
+        (payload) => {
+          const row = payload.new
+          if (row?.peer_id === contact.id && !cancelled) {
+            setMyReadUntil(new Date(row.read_until).getTime())
           }
         }
       )
@@ -289,6 +327,7 @@ export default function Chat({
           .rpc('mark_read', { p_peer: contact.id, p_until: new Date(latest).toISOString() })
           .then(({ error }) => {
             if (error) lastMarkRef.current = 0 // try again next time
+            else setMyReadUntil((prev) => Math.max(prev ?? 0, latest))
           })
       }
     }
@@ -473,6 +512,11 @@ export default function Chat({
             <div key={m.id} className="line system">
               📳 {m.mine ? 'You buzzed' : `@${contact.username} buzzed you`}!
               <time>{fmt(m.time)}</time>
+              {eyeLabel(m) && (
+                <div className="eyes" title={`Seen by ${eyeLabel(m)}`}>
+                  👁 <span>{eyeLabel(m)}</span>
+                </div>
+              )}
             </div>
           ) : (
             <div key={m.id} className="line">
@@ -486,12 +530,12 @@ export default function Chat({
               )}
               <time>{fmt(m.time)}</time>
               {m.mine && (
-                <span
-                  className={`tick ${isSeen(m) ? 'seen' : ''}`}
-                  title={isSeen(m) ? 'Seen' : 'Sent'}
-                >
-                  {isSeen(m) ? '✓✓' : '✓'}
-                </span>
+                <span className="tick" title="Sent">✓</span>
+              )}
+              {eyeLabel(m) && (
+                <div className="eyes" title={`Seen by ${eyeLabel(m)}`}>
+                  👁 <span>{eyeLabel(m)}</span>
+                </div>
               )}
             </div>
           )
