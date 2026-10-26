@@ -118,7 +118,7 @@ export default function Auth() {
           required
         />
 
-        {mode !== 'forgot' && (
+        {mode !== 'forgot' &&  (
           <input
             type="password"
             placeholder="Password (8+ characters)"

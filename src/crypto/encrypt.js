@@ -113,7 +113,10 @@ export async function decryptMessage(myPrivateKey, theirPublicJwk, meta, { ciphe
 }
 
 // One message -> one encrypted copy per device (friend's devices + my own devices)
-export async function buildCopies({ myPrivateKey, myId, myDeviceId, friendId, devices, text }) {
+// kind: 'msg' for normal messages (text, replies, buzz), 'react' for reactions
+export async function buildCopies({
+  myPrivateKey, myId, myDeviceId, friendId, devices, text, kind = 'msg',
+}) {
   if (!devices.length) throw new Error('No devices to encrypt for')
 
   const msgId = crypto.randomUUID()
@@ -134,6 +137,7 @@ export async function buildCopies({ myPrivateKey, myId, myDeviceId, friendId, de
       sender_device: myDeviceId,
       target_device: d.id,
       target_user: d.user_id,
+      kind,
       ciphertext,
       iv,
     })
