@@ -126,3 +126,4 @@ button.danger:hover:not(:disabled) { background: #8e0000; }
 .device { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin: 8px 0; background: #fff; }
 .devtop { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 .tag-this { background: #e8f5e9; color: #2e7d32; border-radius: 10px; font-size: 11px; padding: 1px 8px; }
+.forgot { font-size: 13px; text-align: right; margin: -4px 0 12px; }
