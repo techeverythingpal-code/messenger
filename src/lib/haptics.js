@@ -34,6 +34,14 @@ function run(pattern) {
   }
 }
 
+export function testVibrate() {
+  if (!('vibrate' in navigator)) return 'unsupported'
+  try {
+    return navigator.vibrate([250, 100, 250]) ? 'sent' : 'blocked'
+  } catch {
+    return 'blocked'
+  }
+}
 // [vibrate, pause, vibrate, ...] in milliseconds
 export const vibrateMessage = () => run([120])
 export const vibrateBuzz = () => run([300, 100, 300, 100, 300])
