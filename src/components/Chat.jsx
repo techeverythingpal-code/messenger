@@ -5,6 +5,7 @@ import { decryptMessage, buildCopies, MAX_MESSAGE_CHARS } from '../crypto/encryp
 import { fingerprint } from '../crypto/keys'
 import { withEmoticons, PICKER } from '../lib/emoticons'
 import { playMessage, playBuzz } from '../lib/sounds'
+import { vibrateBuzz, vibrateMessage } from '../lib/haptics'
 
 // A buzz is an ordinary encrypted message with this reserved text,
 // so the server can't tell a buzz from any other message.
@@ -154,15 +155,17 @@ export default function Chat({
             setMessages((prev) => mergeInto(prev, [view]))
             if (view.mine) return // sent from another device of mine
 
-            if (view.buzz) {
+                        if (view.buzz) {
               const t = Date.now()
               if (t - lastBuzzShown.current > SHAKE_THROTTLE_MS) {
                 lastBuzzShown.current = t
                 playBuzz()
+                vibrateBuzz()
                 onBuzzRef.current()
               }
             } else if (view.text !== null) {
               playMessage()
+              vibrateMessage()
             }
           } catch {
             /* a message we can't process is skipped */
@@ -291,6 +294,8 @@ export default function Chat({
     try {
       await sendText(BUZZ_TOKEN)
       lastBuzzSent.current = Date.now()
+      vibrateBuzz() // the sender feels it too
+      onBuzzRef.current() //sender’s window to shake
     } catch (err) {
       setError(err.message)
     } finally {

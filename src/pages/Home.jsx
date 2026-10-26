@@ -12,6 +12,7 @@ import Devices from '../components/Devices'
 import DeleteAccount from '../components/DeleteAccount'
 import { setTabBadge } from '../lib/tabBadge'
 import { pushSupported, pushStatus, enablePush, disablePush, pausePush } from '../lib/push'
+import { canVibrate, isVibrateOn, setVibrateOn, vibrateMessage } from '../lib/haptics'
 
 const STATUSES = [
   { value: 'available', label: '🟢 Available' },
@@ -87,6 +88,7 @@ export default function Home({ session }) {
   const [unread, setUnread] = useState({})
   const [status, setStatus] = useState(() => loadStatus(userId))
   const [muted, setMutedState] = useState(isMuted)
+  const [vibrate, setVibrate] = useState(isVibrateOn)
   const [shaking, setShaking] = useState(false)
   const [pushOn, setPushOn] = useState(false)
   const [pushMsg, setPushMsg] = useState('')
@@ -201,6 +203,13 @@ export default function Home({ session }) {
     const next = !muted
     setMuted(next)
     setMutedState(next)
+  }
+
+    function toggleVibrate() {
+    const next = !vibrate
+    setVibrateOn(next)
+    setVibrate(next)
+    if (next) vibrateMessage() // a short tap so you can feel that it's on
   }
 
   const markRead = useCallback(
@@ -330,7 +339,10 @@ export default function Home({ session }) {
           if (chatOpen && !document.hidden) return
 
           setUnread((prev) => ({ ...prev, [sender]: (prev[sender] || 0) + 1 }))
-          if (!chatOpen) playMessage() // an open chat plays its own sound
+                    if (!chatOpen) {
+            playMessage() // an open chat plays its own sound and vibration
+            vibrateMessage()
+          }
         }
       )
       .subscribe()
@@ -395,7 +407,17 @@ export default function Home({ session }) {
           title={muted ? 'Sounds off' : 'Sounds on'}
         >
           {muted ? '🔇' : '🔊'}
+
         </button>
+                {canVibrate() && (
+          <button
+            className="icon"
+            onClick={toggleVibrate}
+            title={vibrate ? 'Vibration on' : 'Vibration off'}
+          >
+            {vibrate ? '📳' : '📴'}
+          </button>
+        )}
       </div>
 
       <div className="wbody">

@@ -20,6 +20,7 @@ self.addEventListener('push', (event) => {
         icon: '/logo.png', // optional: ignored if you have no logo.png in /public
         tag: data.tag || 'messenger',
         renotify: true,
+        vibrate: [200, 100, 200],
         data: { senderId: data.senderId || null },
       })
     })()
