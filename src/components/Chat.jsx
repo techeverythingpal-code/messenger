@@ -7,6 +7,7 @@ import { withEmoticons, PICKER } from '../lib/emoticons'
 import { playMessage, playBuzz } from '../lib/sounds'
 import { vibrateBuzz, vibrateMessage } from '../lib/haptics'
 import { onRefresh } from '../lib/refresh'
+import { useTyping } from '../lib/useTyping'
 
 // A buzz is an ordinary encrypted message with this reserved text,
 // so the server can't tell a buzz from any other message.
@@ -65,7 +66,7 @@ function mergeInto(prev, views) {
 
 export default function Chat({
   myId, myName, deviceId, myPrivateKey, contact, status, expireAfter,
-  onExpiryChanged, onSeen, onBuzz, onClose,
+  shareSeen, shareTyping, onExpiryChanged, onSeen, onBuzz, onClose,
 }) {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
@@ -75,11 +76,13 @@ export default function Chat({
   const [showPicker, setShowPicker] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
+  const [readUntil, setReadUntil] = useState(null) // when my friend last read my messages
 
   const listRef = useRef(null)
   const inputRef = useRef(null)
   const lastBuzzSent = useRef(0)
   const lastBuzzShown = useRef(0)
+  const lastMarkRef = useRef(0)
   const refreshRef = useRef(() => {})
   const onSeenRef = useRef(onSeen)
   const onBuzzRef = useRef(onBuzz)
@@ -89,6 +92,11 @@ export default function Chat({
   })
 
   const dir = useMemo(() => createDirectory(myId, contact.id), [myId, contact.id])
+  const { peerTyping, notifyTyping, stopTyping, clearTyping } = useTyping(
+    myId,
+    contact.id,
+    shareTyping
+  )
 
   // Re-check every 30 seconds so expired messages disappear from the screen
   useEffect(() => {
@@ -98,6 +106,10 @@ export default function Chat({
   const visible = expireAfter
     ? messages.filter((m) => new Date(m.time).getTime() > now - expireAfter * 1000)
     : messages
+
+  // Seen ticks only show if I share my own receipts too
+  const seenCutoff = shareSeen ? readUntil : null
+  const isSeen = (m) => seenCutoff !== null && new Date(m.time).getTime() <= seenCutoff
 
   // Catch up whenever the app asks (tab shown, back online, notification tapped, timer)
   useEffect(() => onRefresh(() => refreshRef.current()), [])
@@ -133,6 +145,15 @@ export default function Chat({
           data.map((row) => toView(row, myId, myPrivateKey, dir))
         )
         if (!cancelled) setMessages((prev) => mergeInto(prev, views))
+
+        // When did my friend last read my messages?
+        const { data: mark } = await supabase
+          .from('read_marks')
+          .select('read_until')
+          .eq('reader_id', contact.id)
+          .eq('peer_id', myId)
+          .maybeSingle()
+        if (!cancelled) setReadUntil(mark ? new Date(mark.read_until).getTime() : null)
       } catch (err) {
         if (!cancelled && !quiet) setError(err.message)
       }
@@ -140,7 +161,7 @@ export default function Chat({
     loadHistory()
     refreshRef.current = () => loadHistory(true)
 
-    // Live copies addressed to THIS device
+    // Live copies addressed to THIS device, and live "seen" updates
     const channel = supabase
       .channel(`chat:${deviceId}:${contact.id}`)
       .on(
@@ -163,6 +184,8 @@ export default function Chat({
             setMessages((prev) => mergeInto(prev, [view]))
             if (view.mine) return // sent from another device of mine
 
+            clearTyping() // a message arrived, so they're done typing
+
             if (view.buzz) {
               const t = Date.now()
               if (t - lastBuzzShown.current > SHAKE_THROTTLE_MS) {
@@ -177,6 +200,21 @@ export default function Chat({
             }
           } catch {
             /* a message we can't process is skipped */
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'read_marks',
+          filter: `reader_id=eq.${contact.id}`,
+        },
+        (payload) => {
+          const row = payload.new
+          if (row?.peer_id === myId && !cancelled) {
+            setReadUntil(new Date(row.read_until).getTime())
           }
         }
       )
@@ -226,24 +264,42 @@ export default function Chat({
       supabase.removeChannel(channel)
       supabase.removeChannel(devChannel)
     }
-  }, [myId, deviceId, myPrivateKey, contact, dir])
+  }, [myId, deviceId, myPrivateKey, contact, dir, clearTyping])
 
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages])
 
-  // Only mark messages as read while this browser tab is actually visible
+  // Mark messages as read, but only while this tab is visible (and, for read
+  // receipts, while the window is actually focused)
   useEffect(() => {
     function markSeen() {
-      if (!document.hidden && messages.length) {
-        onSeenRef.current(messages[messages.length - 1].id)
+      if (document.hidden || !messages.length) return
+      onSeenRef.current(messages[messages.length - 1].id)
+
+      if (!shareSeen || !document.hasFocus()) return
+      let latest = 0
+      for (const m of messages) {
+        if (!m.mine) latest = Math.max(latest, new Date(m.time).getTime())
+      }
+      if (latest > lastMarkRef.current) {
+        lastMarkRef.current = latest
+        supabase
+          .rpc('mark_read', { p_peer: contact.id, p_until: new Date(latest).toISOString() })
+          .then(({ error }) => {
+            if (error) lastMarkRef.current = 0 // try again next time
+          })
       }
     }
     markSeen()
     document.addEventListener('visibilitychange', markSeen)
-    return () => document.removeEventListener('visibilitychange', markSeen)
-  }, [messages])
+    window.addEventListener('focus', markSeen)
+    return () => {
+      document.removeEventListener('visibilitychange', markSeen)
+      window.removeEventListener('focus', markSeen)
+    }
+  }, [messages, shareSeen, contact.id])
 
   async function sendText(plain) {
     // Fresh device list, so brand-new devices get this message too
@@ -290,6 +346,7 @@ export default function Chat({
     try {
       await sendText(t)
       setText('')
+      stopTyping()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -307,11 +364,10 @@ export default function Chat({
     setSending(true)
     setError('')
     try {
-            await sendText(BUZZ_TOKEN)
+      await sendText(BUZZ_TOKEN)
       lastBuzzSent.current = Date.now()
       vibrateBuzz() // the sender feels it too
       onBuzzRef.current() // and sees their own window shake
-      playBuzz()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -429,10 +485,20 @@ export default function Chat({
                 withEmoticons(stripControls(m.text))
               )}
               <time>{fmt(m.time)}</time>
+              {m.mine && (
+                <span
+                  className={`tick ${isSeen(m) ? 'seen' : ''}`}
+                  title={isSeen(m) ? 'Seen' : 'Sent'}
+                >
+                  {isSeen(m) ? '✓✓' : '✓'}
+                </span>
+              )}
             </div>
           )
         )}
       </div>
+
+      <div className="typing">{peerTyping ? `@${contact.username} is typing…` : ''}</div>
 
       {showPicker && (
         <div className="picker">
@@ -454,7 +520,10 @@ export default function Chat({
           ref={inputRef}
           placeholder="Type a message"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value)
+            if (e.target.value) notifyTyping()
+          }}
           maxLength={MAX_MESSAGE_CHARS}
           autoComplete="off"
         />

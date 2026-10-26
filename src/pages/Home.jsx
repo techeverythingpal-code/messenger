@@ -7,12 +7,13 @@ import { usePresence } from '../lib/usePresence'
 import { isMuted, setMuted, playMessage } from '../lib/sounds'
 import { setTabBadge } from '../lib/tabBadge'
 import { pushSupported, pushStatus, enablePush, disablePush, pausePush } from '../lib/push'
-import { canVibrate, isVibrateOn, setVibrateOn, vibrateMessage } from '../lib/haptics'
+import { canVibrate, isVibrateOn, setVibrateOn, vibrateMessage, testVibrate } from '../lib/haptics'
 import { startAutoRefresh, onRefresh, requestRefresh } from '../lib/refresh'
 import UsernameForm from '../components/UsernameForm'
 import ContactList from '../components/ContactList'
 import Chat from '../components/Chat'
 import Devices from '../components/Devices'
+import Settings from '../components/Settings'
 import DeleteAccount from '../components/DeleteAccount'
 
 const STATUSES = [
@@ -67,24 +68,34 @@ function writeSeen(userId, ids) {
 
 async function loadEverything(userId) {
   const device = await ensureDevice(userId)
-  if (device.status !== 'ok') return { device, username: undefined }
+  if (device.status !== 'ok') {
+    return { device, username: undefined, shareSeen: true, shareTyping: true }
+  }
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('username')
+    .select('username, share_seen, share_typing')
     .eq('id', userId)
     .single()
   if (error) throw error
-  return { device, username: data.username }
+  return {
+    device,
+    username: data.username,
+    shareSeen: data.share_seen !== false,
+    shareTyping: data.share_typing !== false,
+  }
 }
 
 export default function Home({ session }) {
   const userId = session.user.id
   const [device, setDevice] = useState(null) // null = loading
   const [username, setUsername] = useState(undefined) // undefined = loading, null = not chosen
+  const [shareSeen, setShareSeen] = useState(true)
+  const [shareTyping, setShareTyping] = useState(true)
   const [error, setError] = useState('')
   const [contact, setContact] = useState(null)
   const [showDevices, setShowDevices] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [alertDevices, setAlertDevices] = useState([]) // devices added that I haven't seen
   const [unread, setUnread] = useState({})
   const [status, setStatus] = useState(() => loadStatus(userId))
@@ -104,6 +115,8 @@ export default function Home({ session }) {
   function apply(r) {
     setDevice(r.device)
     setUsername(r.username)
+    setShareSeen(r.shareSeen)
+    setShareTyping(r.shareTyping)
   }
 
   useEffect(() => {
@@ -147,7 +160,23 @@ export default function Home({ session }) {
     const next = !vibrate
     setVibrateOn(next)
     setVibrate(next)
-    if (next) vibrateMessage() // a short tap so you can feel that it's on
+    if (!next) {
+      setPushMsg('Vibration is off.')
+      return
+    }
+    const result = testVibrate()
+    setPushMsg(
+      result === 'sent'
+        ? 'Test vibration sent. If you felt nothing, check your phone: silent mode, Do Not Disturb, battery saver, or the system vibration and haptic settings.'
+        : result === 'unsupported'
+          ? "This browser can't vibrate. Use Chrome or Edge on Android."
+          : 'The browser blocked the vibration. Tap the page, keep this tab in front, and try again.'
+    )
+  }
+
+  function handlePrivacyChange(patch) {
+    if ('share_seen' in patch) setShareSeen(patch.share_seen)
+    if ('share_typing' in patch) setShareTyping(patch.share_typing)
   }
 
   const markRead = useCallback(
@@ -206,6 +235,7 @@ export default function Home({ session }) {
       const f = friends.find((x) => x.id === senderId)
       if (!f) return false
       setShowDevices(false)
+      setShowSettings(false)
       setContact(f)
       return true
     }
@@ -292,7 +322,14 @@ export default function Home({ session }) {
 
   function openDevices() {
     setContact(null)
+    setShowSettings(false)
     setShowDevices(true)
+  }
+
+  function openSettings() {
+    setContact(null)
+    setShowDevices(false)
+    setShowSettings(true)
   }
 
   // ----- Unread counts -----
@@ -390,6 +427,8 @@ export default function Home({ session }) {
   }
 
   const myDot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
+  const onList = ready && !contact && !showDevices && !showSettings
+  const inChat = ready && contact && !showDevices && !showSettings
 
   return (
     <div className={`window ${shaking ? 'shake' : ''}`}>
@@ -419,6 +458,9 @@ export default function Home({ session }) {
             </button>
             <button className="icon" onClick={openDevices} title="My devices">
               💻
+            </button>
+            <button className="icon" onClick={openSettings} title="Settings">
+              ⚙️
             </button>
           </>
         )}
@@ -486,7 +528,18 @@ export default function Home({ session }) {
           />
         )}
 
-        {ready && !contact && !showDevices && (
+        {ready && showSettings && (
+          <Settings
+            userId={userId}
+            email={session.user.email}
+            shareSeen={shareSeen}
+            shareTyping={shareTyping}
+            onPrivacyChange={handlePrivacyChange}
+            onBack={() => setShowSettings(false)}
+          />
+        )}
+
+        {onList && (
           <div>
             <ContactList
               myId={userId}
@@ -505,7 +558,7 @@ export default function Home({ session }) {
           </div>
         )}
 
-        {ready && contact && !showDevices && (
+        {inChat && (
           <Chat
             key={contact.id}
             myId={userId}
@@ -515,6 +568,8 @@ export default function Home({ session }) {
             contact={contact}
             status={online.get(contact.id)}
             expireAfter={friends.find((f) => f.id === contact.id)?.expireAfter ?? null}
+            shareSeen={shareSeen}
+            shareTyping={shareTyping}
             onExpiryChanged={reload}
             onSeen={(id) => markRead(contact.id, id)}
             onBuzz={shake}
