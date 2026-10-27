@@ -2,20 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { createDirectory } from '../lib/deviceDirectory'
 import { buildCopies, MAX_MESSAGE_CHARS } from '../crypto/encrypt'
-import { fingerprint } from '../crypto/keys'
 import { PICKER } from '../lib/emoticons'
-import { playMessage, playBuzz } from '../lib/sounds'
-import { vibrateBuzz, vibrateMessage } from '../lib/haptics'
-import { onRefresh } from '../lib/refresh'
+import { playBuzz } from '../lib/sounds'
+import { vibrateBuzz } from '../lib/haptics'
 import { useTyping } from '../lib/useTyping'
 import {
   BUZZ_TOKEN, REPLY_OVERHEAD,
   stripControls, snippetOf, buildReply, buildReaction,
 } from './chat/protocol'
-import { toView, mergeInto } from './chat/messageView'
+import { toView } from './chat/messageView'
+import { useChatSync } from './chat/useChatSync'
 import MessageLine from './chat/MessageLine'
 const BUZZ_COOLDOWN_MS = 10000
-const SHAKE_THROTTLE_MS = 5000
+
 
 const EXPIRY_OPTIONS = [
   { value: 'off', label: 'Off', seconds: null },
@@ -31,25 +30,25 @@ export default function Chat({
   myId, myName, deviceId, myPrivateKey, contact, status, expireAfter,
   shareSeen, shareTyping, onExpiryChanged, onSeen, onBuzz, onClose,
 }) {
-  const [messages, setMessages] = useState([])
+ 
   const [text, setText] = useState('')
-  const [contactDevices, setContactDevices] = useState([])
+  
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   const [now, setNow] = useState(() => Date.now())
-  const [notice, setNotice] = useState('')
-  const [readUntil, setReadUntil] = useState(null) // when my friend last read my messages
-  const [myReadUntil, setMyReadUntil] = useState(null) // when I last read my friend's messages
+  
+  
+  
   const [selected, setSelected] = useState(null) // the message whose Reply / React bar is open
   const [replyToId, setReplyToId] = useState(null) // msg_id of the message I'm replying to
 
   const listRef = useRef(null)
   const inputRef = useRef(null)
   const lastBuzzSent = useRef(0)
-  const lastBuzzShown = useRef(0)
+  
   const lastMarkRef = useRef(0)
-  const refreshRef = useRef(() => {})
+  
   const onSeenRef = useRef(onSeen)
   const onBuzzRef = useRef(onBuzz)
   useEffect(() => {
@@ -66,6 +65,12 @@ export default function Chat({
 
   // Re-check every 30 seconds so expired messages disappear from the screen
   useEffect(() => {
+      const {
+    messages, contactDevices, notice, readUntil, myReadUntil,
+    addMessages, bumpMyReadUntil, clearNotice,
+  } = useChatSync({
+    myId, deviceId, myPrivateKey, contact, dir, clearTyping, onBuzzRef, onError: setError,
+  })
     const t = setInterval(() => setNow(Date.now()), 30000)
     return () => clearInterval(t)
   }, [])
@@ -111,185 +116,9 @@ export default function Chat({
   const eyeLabel = (m) =>
     m.id === friendEyeId ? `@${contact.username}` : m.id === myEyeId ? 'You' : null
 
-  // Catch up whenever the app asks (tab shown, back online, notification tapped, timer)
-  useEffect(() => onRefresh(() => refreshRef.current()), [])
+  
 
-  useEffect(() => {
-    let cancelled = false
-    let hadConnection = false
-
-    // quiet = background catch-ups don't show errors (for example while offline)
-    async function loadHistory(quiet = false) {
-      try {
-        const devs = await dir.refresh()
-        const theirs = await Promise.all(
-          devs
-            .filter((d) => d.user_id === contact.id)
-            .map(async (d) => ({ id: d.id, name: d.name, fp: await fingerprint(d.public_key) }))
-        )
-        if (!cancelled) setContactDevices(theirs)
-
-        const pair =
-          `and(sender_id.eq.${myId},receiver_id.eq.${contact.id}),` +
-          `and(sender_id.eq.${contact.id},receiver_id.eq.${myId})`
-        const { data, error } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('target_device', deviceId)
-          .or(pair)
-          .order('created_at', { ascending: false })
-          .limit(200)
-        if (error) throw error
-
-        const views = await Promise.all(
-          data.map((row) => toView(row, myId, myPrivateKey, dir))
-        )
-        if (!cancelled) setMessages((prev) => mergeInto(prev, views))
-
-        // When did my friend last read my messages?
-        const { data: mark } = await supabase
-          .from('read_marks')
-          .select('read_until')
-          .eq('reader_id', contact.id)
-          .eq('peer_id', myId)
-          .maybeSingle()
-        if (!cancelled) setReadUntil(mark ? new Date(mark.read_until).getTime() : null)
-
-        // When did I last read my friend's messages?
-        const { data: myMark } = await supabase
-          .from('read_marks')
-          .select('read_until')
-          .eq('reader_id', myId)
-          .eq('peer_id', contact.id)
-          .maybeSingle()
-        if (!cancelled) setMyReadUntil(myMark ? new Date(myMark.read_until).getTime() : null)
-      } catch (err) {
-        if (!cancelled && !quiet) setError(err.message)
-      }
-    }
-    loadHistory()
-    refreshRef.current = () => loadHistory(true)
-
-    // Live copies addressed to THIS device, and live "seen" updates
-    const channel = supabase
-      .channel(`chat:${deviceId}:${contact.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `target_device=eq.${deviceId}`,
-        },
-        async (payload) => {
-          const r = payload.new
-          const inThisChat =
-            (r.sender_id === contact.id && r.receiver_id === myId) ||
-            (r.sender_id === myId && r.receiver_id === contact.id)
-          if (!inThisChat) return
-          try {
-            const view = await toView(r, myId, myPrivateKey, dir)
-            if (cancelled) return
-            setMessages((prev) => mergeInto(prev, [view]))
-            if (view.mine) return // sent from another device of mine
-            if (view.react) return // a reaction: no sound, it just appears on the message
-
-            clearTyping() // a message arrived, so they're done typing
-
-            if (view.buzz) {
-              const t = Date.now()
-              if (t - lastBuzzShown.current > SHAKE_THROTTLE_MS) {
-                lastBuzzShown.current = t
-                playBuzz()
-                vibrateBuzz()
-                onBuzzRef.current()
-              }
-            } else if (view.text !== null) {
-              playMessage()
-              vibrateMessage()
-            }
-          } catch {
-            /* a message we can't process is skipped */
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'read_marks',
-          filter: `reader_id=eq.${contact.id}`,
-        },
-        (payload) => {
-          const row = payload.new
-          if (row?.peer_id === myId && !cancelled) {
-            setReadUntil(new Date(row.read_until).getTime())
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'read_marks',
-          filter: `reader_id=eq.${myId}`,
-        },
-        (payload) => {
-          const row = payload.new
-          if (row?.peer_id === contact.id && !cancelled) {
-            setMyReadUntil(new Date(row.read_until).getTime())
-          }
-        }
-      )
-      .subscribe((state) => {
-        // After a dropped connection comes back, fetch anything we missed
-        if (state === 'SUBSCRIBED') {
-          if (hadConnection) loadHistory(true)
-          hadConnection = true
-        }
-      })
-
-    // Warn when this contact adds a new device
-    const devChannel = supabase
-      .channel(`contact-devices:${contact.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'devices',
-          filter: `user_id=eq.${contact.id}`,
-        },
-        async (payload) => {
-          const d = payload.new
-          try {
-            const key =
-              typeof d.public_key === 'string' ? JSON.parse(d.public_key) : d.public_key
-            const fp = await fingerprint(key)
-            if (cancelled) return
-            setContactDevices((prev) =>
-              prev.some((x) => x.id === d.id) ? prev : [...prev, { id: d.id, name: d.name, fp }]
-            )
-            setNotice(
-              `@${contact.username} added a new device (${d.name}). ` +
-                'Compare its fingerprint with them before trusting it.'
-            )
-          } catch {
-            /* ignore a malformed device */
-          }
-        }
-      )
-      .subscribe()
-
-    return () => {
-      cancelled = true
-      refreshRef.current = () => {}
-      supabase.removeChannel(channel)
-      supabase.removeChannel(devChannel)
-    }
-  }, [myId, deviceId, myPrivateKey, contact, dir, clearTyping])
+ 
 
   useEffect(() => {
     const el = listRef.current
@@ -314,7 +143,7 @@ export default function Chat({
           .rpc('mark_read', { p_peer: contact.id, p_until: new Date(latest).toISOString() })
           .then(({ error }) => {
             if (error) lastMarkRef.current = 0 // try again next time
-            else setMyReadUntil((prev) => Math.max(prev ?? 0, latest))
+              else bumpMyReadUntil(latest)
           })
       }
     }
@@ -325,7 +154,7 @@ export default function Chat({
       document.removeEventListener('visibilitychange', markSeen)
       window.removeEventListener('focus', markSeen)
     }
-  }, [messages, shareSeen, contact.id])
+  },   [messages, shareSeen, contact.id, bumpMyReadUntil])
 
   async function sendText(plain, kind = 'msg') {
     // Fresh device list, so brand-new devices get this message too
@@ -361,7 +190,7 @@ export default function Chat({
     if (e2) throw e2
 
     const view = await toView(data, myId, myPrivateKey, dir)
-    setMessages((prev) => mergeInto(prev, [view]))
+      addMessages([view])
   }
 
   async function handleSend(e) {
@@ -506,7 +335,7 @@ export default function Chat({
       {notice && (
         <div className="warn">
           <p>⚠️ {notice}</p>
-          <button className="small secondary" onClick={() => setNotice('')}>OK</button>
+          <button className="small secondary"   onClick={clearNotice}>OK</button>
         </div>
       )}
 
