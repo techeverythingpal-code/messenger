@@ -8,22 +8,13 @@ import { playMessage, playBuzz } from '../lib/sounds'
 import { vibrateBuzz, vibrateMessage } from '../lib/haptics'
 import { onRefresh } from '../lib/refresh'
 import { useTyping } from '../lib/useTyping'
+import {
+  BUZZ_TOKEN, REACTIONS, REPLY_OVERHEAD,
+  stripControls, parsePlain, snippetOf, reactChips, buildReply, buildReaction,
+} from './chat/protocol'
 
-// A buzz is an ordinary encrypted message with this reserved text,
-// so the server can't tell a buzz from any other message.
-const BUZZ_TOKEN = '\u0000BUZZ'
 const BUZZ_COOLDOWN_MS = 10000
 const SHAKE_THROTTLE_MS = 5000
-
-// Replies and reactions are also ordinary encrypted text with a reserved start:
-//   reply:    \u0000REPLY<msg_id>\u0000<text>
-//   reaction: \u0000REACT<msg_id>\u0000<emoji>   (empty emoji = remove my reaction)
-// People can't type control characters (see stripControls), so these can't be faked.
-const REPLY_PREFIX = '\u0000REPLY'
-const REACT_PREFIX = '\u0000REACT'
-const REPLY_OVERHEAD = REPLY_PREFIX.length + 36 + 1
-const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
-const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
 
 const EXPIRY_OPTIONS = [
   { value: 'off', label: 'Off', seconds: null },
@@ -32,55 +23,8 @@ const EXPIRY_OPTIONS = [
   { value: '604800', label: '7 days', seconds: 604800 },
 ]
 
-// Remove control characters so nobody can fake a buzz by typing or pasting it
-function stripControls(s) {
-  let out = ''
-  for (const ch of s) {
-    const c = ch.codePointAt(0)
-    if ((c >= 32 && c !== 127) || c === 10 || c === 9) out += ch
-  }
-  return out
-}
-
 const fmt = (t) =>
   new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-
-// Turn decrypted text into what it really is: text, buzz, reply or reaction
-function parsePlain(text) {
-  if (text === null) return { type: 'bad', text: null }
-  if (text === BUZZ_TOKEN) return { type: 'buzz', text }
-  const isReply = text.startsWith(REPLY_PREFIX)
-  const isReact = text.startsWith(REACT_PREFIX)
-  if (!isReply && !isReact) return { type: 'text', text }
-
-  const rest = text.slice(isReply ? REPLY_PREFIX.length : REACT_PREFIX.length)
-  const id = rest.slice(0, 36)
-  if (UUID_RE.test(id) && rest[36] === '\u0000') {
-    const body = rest.slice(37)
-    if (isReply) return { type: 'reply', text: body, replyTo: id }
-    if (body === '' || REACTIONS.includes(body)) {
-      return { type: 'react', text: null, target: id, emoji: body }
-    }
-  }
-  return { type: 'bad', text: null } // a format this version doesn't understand
-}
-
-// A short one-line preview of a message, for reply quotes
-function snippetOf(m) {
-  if (m.buzz) return '📳 Buzz'
-  if (m.text === null) return "🔒 Can't decrypt"
-  const t = stripControls(m.text).replace(/\s+/g, ' ').trim()
-  return t.length > 80 ? `${t.slice(0, 80)}…` : t
-}
-
-// Group my reaction and my friend's reaction into chips: [{ emoji, who: [...] }]
-function reactChips(r, friendName) {
-  if (!r) return []
-  const by = new Map()
-  if (r.me) by.set(r.me, ['You'])
-  if (r.them) by.set(r.them, [...(by.get(r.them) || []), `@${friendName}`])
-  return [...by].map(([emoji, who]) => ({ emoji, who }))
-}
 
 const metaOf = (row) => ({
   msgId: row.msg_id,
@@ -462,7 +406,7 @@ export default function Chat({
         setError(`A reply can be at most ${MAX_MESSAGE_CHARS - REPLY_OVERHEAD} characters.`)
         return
       }
-      plain = `${REPLY_PREFIX}${replyTarget.msgId}\u0000${t}`
+      plain = buildReply(replyTarget.msgId, t)
     }
     setSending(true)
     setError('')
@@ -514,7 +458,7 @@ export default function Chat({
     setSending(true)
     setError('')
     try {
-      await sendText(`${REACT_PREFIX}${m.msgId}\u0000${next}`, 'react')
+      await sendText(buildReaction(m.msgId, next), 'react')
     } catch (err) {
       setError(err.message)
     } finally {
