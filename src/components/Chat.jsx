@@ -13,15 +13,11 @@ import {
 import { toView } from './chat/messageView'
 import { useChatSync } from './chat/useChatSync'
 import MessageLine from './chat/MessageLine'
+import ChatHeader from './chat/ChatHeader'
 const BUZZ_COOLDOWN_MS = 10000
 
 
-const EXPIRY_OPTIONS = [
-  { value: 'off', label: 'Off', seconds: null },
-  { value: '3600', label: '1 hour', seconds: 3600 },
-  { value: '86400', label: '1 day', seconds: 86400 },
-  { value: '604800', label: '7 days', seconds: 604800 },
-]
+
 
 
 
@@ -263,25 +259,7 @@ export default function Chat({
     }
   }
 
-  async function handleExpiry(e) {
-    const opt = EXPIRY_OPTIONS.find((o) => o.value === e.target.value)
-    if (!opt) return
-    if (opt.seconds) {
-      const ok = window.confirm(
-        `Messages older than ${opt.label} will be deleted for BOTH of you, ` +
-          `and new messages will disappear after ${opt.label}.\n\n` +
-          'This cannot be undone. Continue?'
-      )
-      if (!ok) return
-    }
-    setError('')
-    const { error } = await supabase.rpc('set_disappearing', {
-      p_contact_id: contact.rowId,
-      p_seconds: opt.seconds,
-    })
-    if (error) setError(error.message)
-    else onExpiryChanged()
-  }
+  
 
   function insertEmoji(emoji) {
     const el = inputRef.current
@@ -298,61 +276,21 @@ export default function Chat({
     })
   }
 
-  const dot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
-  const statusText =
-    status === 'available' ? 'Online' : status === 'busy' ? 'Busy' : 'Offline'
+  
 
   return (
     <div>
-      <div className="chat-head">
-        <strong>
-          <span className={`dot ${dot}`} /> @{contact.username}
-        </strong>
-        <span className="muted">{statusText}</span>
-        <button className="small secondary" onClick={onClose}>← Back</button>
-      </div>
-
-      <details className="fpbox">
-        <summary>🔒 End-to-end encrypted. Tap to verify.</summary>
-        {contactDevices.length === 0 ? (
-          <p>@{contact.username} hasn't set up encryption on any device yet.</p>
-        ) : (
-          <div>
-            <p>
-              @{contact.username}'s devices. Compare each fingerprint with them in
-              person or by phone to be sure no one is intercepting:
-            </p>
-            {contactDevices.map((d) => (
-              <p key={d.id}>
-                <strong>{d.name}</strong>
-                <code className="fp">{d.fp}</code>
-              </p>
-            ))}
-          </div>
-        )}
-      </details>
-
-      {notice && (
-        <div className="warn">
-          <p>⚠️ {notice}</p>
-          <button className="small secondary"   onClick={clearNotice}>OK</button>
-        </div>
-      )}
-
-      <div className="expiry">
-        <label>
-          ⏳ Disappearing messages{' '}
-          <select
-            value={expireAfter ? String(expireAfter) : 'off'}
-            onChange={handleExpiry}
-          >
-            {EXPIRY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </label>
-        {expireAfter && <span className="muted">applies to both of you</span>}
-      </div>
+            <ChatHeader
+        contact={contact}
+        status={status}
+        contactDevices={contactDevices}
+        notice={notice}
+        expireAfter={expireAfter}
+        onDismissNotice={clearNotice}
+        onExpiryChanged={onExpiryChanged}
+        onError={setError}
+        onClose={onClose}
+      />
 
       <div className="log" ref={listRef}>
         {visible.length === 0 && <p className="empty">No messages yet. Say hi!</p>}
