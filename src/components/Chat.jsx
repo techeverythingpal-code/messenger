@@ -53,20 +53,21 @@ export default function Chat({
   })
 
   const dir = useMemo(() => createDirectory(myId, contact.id), [myId, contact.id])
-  const { peerTyping, notifyTyping, stopTyping, clearTyping } = useTyping(
+    const { peerTyping, notifyTyping, stopTyping, clearTyping } = useTyping(
     myId,
     contact.id,
     shareTyping
   )
 
-  // Re-check every 30 seconds so expired messages disappear from the screen
-  useEffect(() => {
-      const {
+  const {
     messages, contactDevices, notice, readUntil, myReadUntil,
     addMessages, bumpMyReadUntil, clearNotice,
   } = useChatSync({
     myId, deviceId, myPrivateKey, contact, dir, clearTyping, onBuzzRef, onError: setError,
   })
+
+  // Re-check every 30 seconds so expired messages disappear from the screen
+  useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30000)
     return () => clearInterval(t)
   }, [])
