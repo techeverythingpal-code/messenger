@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { createDirectory } from '../lib/deviceDirectory'
-import { decryptMessage, buildCopies, MAX_MESSAGE_CHARS } from '../crypto/encrypt'
+import { buildCopies, MAX_MESSAGE_CHARS } from '../crypto/encrypt'
 import { fingerprint } from '../crypto/keys'
 import { withEmoticons, PICKER } from '../lib/emoticons'
 import { playMessage, playBuzz } from '../lib/sounds'
@@ -10,8 +10,9 @@ import { onRefresh } from '../lib/refresh'
 import { useTyping } from '../lib/useTyping'
 import {
   BUZZ_TOKEN, REACTIONS, REPLY_OVERHEAD,
-  stripControls, parsePlain, snippetOf, reactChips, buildReply, buildReaction,
+  stripControls, snippetOf, reactChips, buildReply, buildReaction,
 } from './chat/protocol'
+import { toView, mergeInto } from './chat/messageView'
 
 const BUZZ_COOLDOWN_MS = 10000
 const SHAKE_THROTTLE_MS = 5000
@@ -26,38 +27,6 @@ const EXPIRY_OPTIONS = [
 const fmt = (t) =>
   new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-const metaOf = (row) => ({
-  msgId: row.msg_id,
-  senderId: row.sender_id,
-  receiverId: row.receiver_id,
-  senderDevice: row.sender_device,
-  targetDevice: row.target_device,
-})
-
-// Decrypt one copy using MY device key + the SENDER DEVICE's public key
-async function toView(row, myId, myPrivateKey, dir) {
-  const senderKey = await dir.keyFor(row.sender_device)
-  const plain = senderKey
-    ? await decryptMessage(myPrivateKey, senderKey, metaOf(row), row)
-    : null
-  const p = parsePlain(plain)
-  return {
-    id: row.id,
-    msgId: row.msg_id,
-    mine: row.sender_id === myId,
-    text: p.text,
-    buzz: p.type === 'buzz',
-    replyTo: p.replyTo ?? null,
-    react: p.type === 'react' ? { target: p.target, emoji: p.emoji } : null,
-    time: row.created_at,
-  }
-}
-
-function mergeInto(prev, views) {
-  const map = new Map(prev.map((m) => [m.id, m]))
-  views.forEach((v) => map.set(v.id, v))
-  return [...map.values()].sort((a, b) => a.id - b.id)
-}
 
 export default function Chat({
   myId, myName, deviceId, myPrivateKey, contact, status, expireAfter,
