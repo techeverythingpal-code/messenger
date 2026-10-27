@@ -5,6 +5,19 @@ import { fingerprint } from '../crypto/keys'
 const fmt = (t) =>
   new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 
+// Load my devices with their fingerprints (throws on error)
+async function fetchDevices(userId) {
+  const { data, error } = await supabase
+    .from('devices')
+    .select('id, name, public_key, created_at, last_seen')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return Promise.all(
+    data.map(async (d) => ({ ...d, fp: await fingerprint(d.public_key) }))
+  )
+}
+
 export default function Devices({ userId, deviceId, onReviewed, onBack }) {
   const [devices, setDevices] = useState(null)
   const [error, setError] = useState('')
@@ -16,23 +29,17 @@ export default function Devices({ userId, deviceId, onReviewed, onBack }) {
     reviewedRef.current = onReviewed
   })
 
-  const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('devices')
-      .select('id, name, public_key, created_at, last_seen')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true })
-    if (error) {
-      setError(error.message)
-      return
-    }
-    const list = await Promise.all(
-      data.map(async (d) => ({ ...d, fp: await fingerprint(d.public_key) }))
-    )
-    setDevices(list)
-    // Looking at the list counts as reviewing: clears the new-device alert
-    reviewedRef.current(list.map((d) => d.id))
-  }, [userId])
+    const load = useCallback(
+    () =>
+      fetchDevices(userId)
+        .then((list) => {
+          setDevices(list)
+          // Looking at the list counts as reviewing: clears the new-device alert
+          reviewedRef.current(list.map((d) => d.id))
+        })
+        .catch((err) => setError(err.message)),
+    [userId]
+  )
 
   useEffect(() => {
     load()
