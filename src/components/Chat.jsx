@@ -490,6 +490,31 @@ export default function Chat({
     try {
       await sendText(BUZZ_TOKEN)
       lastBuzzSent.current = Date.now()
+      vibrateBuzz() // the sender feels it too
+      onBuzzRef.current() // and sees their own window shake
+      playBuzz() // and hears the buzz sound
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  function startReply(m) {
+    setReplyToId(m.msgId)
+    setSelected(null)
+    inputRef.current?.focus()
+  }
+
+  // Tapping my current reaction again removes it; another emoji replaces it
+  async function handleReact(m, emoji) {
+    if (sending) return
+    const next = reactionsOf.get(m.msgId)?.me === emoji ? '' : emoji
+    setSelected(null)
+    setSending(true)
+    setError('')
+    try {
+      await sendText(`${REACT_PREFIX}${m.msgId}\u0000${next}`, 'react')
     } catch (err) {
       setError(err.message)
     } finally {
