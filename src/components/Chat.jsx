@@ -3,17 +3,17 @@ import { supabase } from '../lib/supabase'
 import { createDirectory } from '../lib/deviceDirectory'
 import { buildCopies, MAX_MESSAGE_CHARS } from '../crypto/encrypt'
 import { fingerprint } from '../crypto/keys'
-import { withEmoticons, PICKER } from '../lib/emoticons'
+import { PICKER } from '../lib/emoticons'
 import { playMessage, playBuzz } from '../lib/sounds'
 import { vibrateBuzz, vibrateMessage } from '../lib/haptics'
 import { onRefresh } from '../lib/refresh'
 import { useTyping } from '../lib/useTyping'
 import {
-  BUZZ_TOKEN, REACTIONS, REPLY_OVERHEAD,
-  stripControls, snippetOf, reactChips, buildReply, buildReaction,
+  BUZZ_TOKEN, REPLY_OVERHEAD,
+  stripControls, snippetOf, buildReply, buildReaction,
 } from './chat/protocol'
 import { toView, mergeInto } from './chat/messageView'
-
+import MessageLine from './chat/MessageLine'
 const BUZZ_COOLDOWN_MS = 10000
 const SHAKE_THROTTLE_MS = 5000
 
@@ -24,8 +24,7 @@ const EXPIRY_OPTIONS = [
   { value: '604800', label: '7 days', seconds: 604800 },
 ]
 
-const fmt = (t) =>
-  new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
 
 
 export default function Chat({
@@ -528,86 +527,21 @@ export default function Chat({
 
       <div className="log" ref={listRef}>
         {visible.length === 0 && <p className="empty">No messages yet. Say hi!</p>}
-        {visible.map((m) =>
-          m.buzz ? (
-            <div key={m.id} className="line system">
-              📳 {m.mine ? 'You buzzed' : `@${contact.username} buzzed you`}!
-              <time>{fmt(m.time)}</time>
-              {eyeLabel(m) && (
-                <div className="eyes" title={`Seen by ${eyeLabel(m)}`}>
-                  👁 <span>{eyeLabel(m)}</span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div
-              key={m.id}
-              className={`line ${selected === m.id ? 'selected' : ''}`}
-              onClick={() => setSelected((s) => (s === m.id ? null : m.id))}
-            >
-              {m.replyTo && (
-                <div className="quote">
-                  {byMsgId.get(m.replyTo) ? (
-                    <>
-                      ↩ <strong>{byMsgId.get(m.replyTo).mine ? 'You' : `@${contact.username}`}</strong>{' '}
-                      {snippetOf(byMsgId.get(m.replyTo))}
-                    </>
-                  ) : (
-                    <em>↩ Original message unavailable</em>
-                  )}
-                </div>
-              )}
-              <span className={`nick ${m.mine ? 'me' : 'them'}`}>
-                {m.mine ? myName : contact.username}:
-              </span>{' '}
-              {m.text === null ? (
-                <em className="bad">🔒 Can't decrypt this message</em>
-              ) : (
-                withEmoticons(stripControls(m.text))
-              )}
-              <time>{fmt(m.time)}</time>
-              {m.mine && (
-                <span className="tick" title="Sent">✓</span>
-              )}
-              {reactChips(reactionsOf.get(m.msgId), contact.username).length > 0 && (
-                <div className="reacts">
-                  {reactChips(reactionsOf.get(m.msgId), contact.username).map((c) => (
-                    <span
-                      key={c.emoji}
-                      className={`react ${c.who.includes('You') ? 'mine' : ''}`}
-                      title={c.who.join(', ')}
-                    >
-                      {c.emoji}
-                      {c.who.length > 1 ? ` ${c.who.length}` : ''}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {selected === m.id && m.text !== null && (
-                <div className="msgbar" onClick={(e) => e.stopPropagation()}>
-                  <button type="button" className="rbtn" onClick={() => startReply(m)}>
-                    ↩ Reply
-                  </button>
-                  {REACTIONS.map((emo) => (
-                    <button
-                      key={emo}
-                      type="button"
-                      className={`rbtn ${reactionsOf.get(m.msgId)?.me === emo ? 'on' : ''}`}
-                      onClick={() => handleReact(m, emo)}
-                    >
-                      {emo}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {eyeLabel(m) && (
-                <div className="eyes" title={`Seen by ${eyeLabel(m)}`}>
-                  👁 <span>{eyeLabel(m)}</span>
-                </div>
-              )}
-            </div>
-          )
-        )}
+               {visible.map((m) => (
+          <MessageLine
+            key={m.id}
+            m={m}
+            myName={myName}
+            friendName={contact.username}
+            quoted={m.replyTo ? byMsgId.get(m.replyTo) : undefined}
+            reactions={reactionsOf.get(m.msgId)}
+            eye={eyeLabel(m)}
+            selected={selected === m.id}
+            onToggle={() => setSelected((s) => (s === m.id ? null : m.id))}
+            onReply={() => startReply(m)}
+            onReact={(emo) => handleReact(m, emo)}
+          />
+        ))}
       </div>
 
       <div className="typing">{peerTyping ? `@${contact.username} is typing…` : ''}</div>
