@@ -5,11 +5,12 @@ import { deleteKeyPair } from '../crypto/keys'
 import { useContacts } from '../lib/useContacts'
 import { usePresence } from '../lib/usePresence'
 import { useUnread } from '../lib/useUnread'
+import { useDeviceAlerts } from '../lib/useDeviceAlerts'
 import { isMuted, setMuted } from '../lib/sounds'
 import { pushSupported, pushStatus, enablePush, disablePush, pausePush } from '../lib/push'
 import { canVibrate, isVibrateOn, setVibrateOn, testVibrate } from '../lib/haptics'
 import { startAutoRefresh, onRefresh, requestRefresh } from '../lib/refresh'
-import { getText, setText, getJSON, setJSON } from '../lib/storage'
+import { getText, setText } from '../lib/storage'
 import UsernameForm from '../components/UsernameForm'
 import ContactList from '../components/ContactList'
 import Chat from '../components/Chat'
@@ -27,14 +28,6 @@ function loadStatus(userId) {
   const s = getText(`status:${userId}`)
   return STATUSES.some((x) => x.value === s) ? s : 'available'
 }
-
-// Which of my devices I have already seen, kept on this device only
-// (null = this device has never recorded any)
-const readSeen = (userId) => {
-  const v = getJSON(`devices-seen:${userId}`, null)
-  return Array.isArray(v) ? v : null
-}
-const writeSeen = (userId, ids) => setJSON(`devices-seen:${userId}`, ids)
 
 async function loadEverything(userId) {
   const device = await ensureDevice(userId)
@@ -66,7 +59,6 @@ export default function Home({ session }) {
   const [contact, setContact] = useState(null)
   const [showDevices, setShowDevices] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [alertDevices, setAlertDevices] = useState([]) // devices added that I haven't seen
   const [status, setStatus] = useState(() => loadStatus(userId))
   const [muted, setMutedState] = useState(isMuted)
   const [vibrate, setVibrate] = useState(isVibrateOn)
@@ -85,6 +77,11 @@ export default function Home({ session }) {
     ready,
     openContactId: contact?.id ?? null,
     friends,
+  })
+  const { alertDevices, handleReviewed, dismissAlert } = useDeviceAlerts({
+    userId,
+    deviceId,
+    ready,
   })
 
   function apply(r) {
@@ -211,68 +208,6 @@ export default function Home({ session }) {
   async function handleLogout() {
     if (deviceId) await pausePush(deviceId)
     await supabase.auth.signOut()
-  }
-
-  // ----- New-device alerts (own account) -----
-  useEffect(() => {
-    if (!ready) return
-    let cancelled = false
-
-    // Devices added while this device was closed
-    supabase
-      .from('devices')
-      .select('id, name')
-      .eq('user_id', userId)
-      .then(({ data }) => {
-        if (cancelled || !data) return
-        const seen = readSeen(userId)
-        if (seen === null) {
-          writeSeen(userId, data.map((d) => d.id)) // first run on this device: nothing to compare yet
-          return
-        }
-        const fresh = data.filter((d) => d.id !== deviceId && !seen.includes(d.id))
-        if (fresh.length) setAlertDevices(fresh)
-      })
-
-    // Devices added while this device is open
-    const channel = supabase
-      .channel(`mydevices:${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'devices',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const d = payload.new
-          if (d.id === deviceId) return
-          setAlertDevices((prev) =>
-            prev.some((x) => x.id === d.id) ? prev : [...prev, { id: d.id, name: d.name }]
-          )
-        }
-      )
-      .subscribe()
-
-    return () => {
-      cancelled = true
-      supabase.removeChannel(channel)
-    }
-  }, [ready, userId, deviceId])
-
-  const handleReviewed = useCallback(
-    (ids) => {
-      writeSeen(userId, ids)
-      setAlertDevices([])
-    },
-    [userId]
-  )
-
-  function dismissAlert() {
-    const seen = readSeen(userId) || []
-    writeSeen(userId, [...new Set([...seen, ...alertDevices.map((d) => d.id)])])
-    setAlertDevices([])
   }
 
   function openDevices() {
