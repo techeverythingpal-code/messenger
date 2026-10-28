@@ -8,27 +8,16 @@ import { useUnread } from '../lib/useUnread'
 import { useDeviceAlerts } from '../lib/useDeviceAlerts'
 import { isMuted, setMuted } from '../lib/sounds'
 import { pausePush } from '../lib/push'
-import { canVibrate } from '../lib/haptics'
 import { usePushSettings } from '../lib/usePushSettings'
 import { startAutoRefresh, onRefresh, requestRefresh } from '../lib/refresh'
-import { getText, setText } from '../lib/storage'
+import { loadStatus, saveStatus } from '../lib/status'
+import ProfileBar from '../components/ProfileBar'
 import UsernameForm from '../components/UsernameForm'
 import ContactList from '../components/ContactList'
 import Chat from '../components/Chat'
 import Devices from '../components/Devices'
 import Settings from '../components/Settings'
 import DeleteAccount from '../components/DeleteAccount'
-
-const STATUSES = [
-  { value: 'available', label: '🟢 Available' },
-  { value: 'busy', label: '🔴 Busy' },
-  { value: 'invisible', label: '⚪ Invisible' },
-]
-
-function loadStatus(userId) {
-  const s = getText(`status:${userId}`)
-  return STATUSES.some((x) => x.value === s) ? s : 'available'
-}
 
 async function loadEverything(userId) {
   const device = await ensureDevice(userId)
@@ -114,7 +103,7 @@ export default function Home({ session }) {
 
   function changeStatus(value) {
     setStatus(value)
-    setText(`status:${userId}`, value)
+    saveStatus(userId, value)
   }
 
   function toggleMute() {
@@ -203,7 +192,6 @@ export default function Home({ session }) {
     await supabase.auth.signOut()
   }
 
-  const myDot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
   // On a narrow screen the right-hand pane replaces the list while it is open
   const paneOpen = showDevices || showSettings || !!contact
 
@@ -214,54 +202,20 @@ export default function Home({ session }) {
         <span className="muted-light">end-to-end encrypted</span>
       </div>
 
-      <div className="profilebar">
-        <div className="who">
-          <span className={`dot ${myDot}`} />
-          <span className="name">{username ? `@${username}` : session.user.email}</span>
-          {ready && (
-            <select value={status} onChange={(e) => changeStatus(e.target.value)}>
-              {STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
-          )}
-        </div>
-        <div className="tools">
-          {ready && (
-            <>
-              <button
-                className="icon"
-                onClick={togglePush}
-                title={pushOn ? 'Notifications on (click to turn off)' : 'Turn on notifications'}
-              >
-                {pushOn ? '🔔' : '🔕'}
-              </button>
-              <button className="icon" onClick={openDevices} title="My devices">
-                💻
-              </button>
-              <button className="icon" onClick={openSettings} title="Settings">
-                ⚙️
-              </button>
-            </>
-          )}
-          <button
-            className="icon"
-            onClick={toggleMute}
-            title={muted ? 'Sounds off' : 'Sounds on'}
-          >
-            {muted ? '🔇' : '🔊'}
-          </button>
-          {canVibrate() && (
-            <button
-              className="icon"
-              onClick={toggleVibrate}
-              title={vibrate ? 'Vibration on' : 'Vibration off'}
-            >
-              {vibrate ? '📳' : '📴'}
-            </button>
-          )}
-        </div>
-      </div>
+      <ProfileBar
+        displayName={username ? `@${username}` : session.user.email}
+        ready={ready}
+        status={status}
+        onStatusChange={changeStatus}
+        pushOn={pushOn}
+        onTogglePush={togglePush}
+        onOpenDevices={openDevices}
+        onOpenSettings={openSettings}
+        muted={muted}
+        onToggleMute={toggleMute}
+        vibrate={vibrate}
+        onToggleVibrate={toggleVibrate}
+      />
 
       <div className="wbody">
         {error && <p className="msg">Error: {error}</p>}
