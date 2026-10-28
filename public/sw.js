@@ -15,7 +15,7 @@ self.addEventListener('push', (event) => {
       // If you are looking at the app right now, the in-app alert is enough
       if (wins.some((w) => w.focused && w.visibilityState === 'visible')) return
 
-      await self.registration.showNotification(data.title || 'MeMe Messenger', {
+      await self.registration.showNotification(data.title || 'Millennials Messenger', {
         body: data.body || 'New message',
         icon: '/logo.png', // optional: ignored if you have no logo.png in /public
         tag: data.tag || 'messenger',

@@ -101,7 +101,7 @@ export default function Auth() {
 
   return (
     <div className="card">
-      <h1>MeMe Messenger</h1>
+      <h1>Millennials Messenger</h1>
       <h2>{title}</h2>
 
       {mode === 'forgot' && (

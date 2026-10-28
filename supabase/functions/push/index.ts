@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
 
   // No message text: the server can't read it
   const payload = JSON.stringify({
-    title: 'MeMe Messenger',
+    title: 'Millennials Messenger',
     body: `New message from @${sender?.username ?? 'a friend'}`,
     senderId: row.sender_id,
     tag: `chat-${row.sender_id}`,

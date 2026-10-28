@@ -413,7 +413,7 @@ export default function Home({ session }) {
   // Unread total: browser tab title and tab icon badge
   const totalUnread = friends.reduce((n, f) => n + (unread[f.id] || 0), 0)
   useEffect(() => {
-    document.title = totalUnread ? `(${totalUnread}) MeMe Messenger` : 'MeMe Messenger'
+    document.title = totalUnread ? `(${totalUnread}) Millennials Messenger` : 'Millennials Messenger'
     setTabBadge(totalUnread)
   }, [totalUnread])
 
@@ -435,7 +435,7 @@ export default function Home({ session }) {
   return (
     <div className={`window ${shaking ? 'shake' : ''}`}>
       <div className="titlebar">
-        <span>💬 MeMe Messenger</span>
+        <span>😎 Millennials Messenger</span>
         <span className="muted-light">end-to-end encrypted</span>
       </div>
 

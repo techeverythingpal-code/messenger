@@ -37,7 +37,7 @@ export default function SetNewPassword({ onDone }) {
 
   return (
     <div className="card">
-      <h1>MeMe Messenger</h1>
+      <h1>Millennials Messenger</h1>
       <h2>Choose a new password</h2>
       <p className="hint">
         After saving, your other signed-in devices will be signed out and will need the
