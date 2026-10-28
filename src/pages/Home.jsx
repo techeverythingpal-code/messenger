@@ -7,8 +7,9 @@ import { usePresence } from '../lib/usePresence'
 import { useUnread } from '../lib/useUnread'
 import { useDeviceAlerts } from '../lib/useDeviceAlerts'
 import { isMuted, setMuted } from '../lib/sounds'
-import { pushSupported, pushStatus, enablePush, disablePush, pausePush } from '../lib/push'
-import { canVibrate, isVibrateOn, setVibrateOn, testVibrate } from '../lib/haptics'
+import { pausePush } from '../lib/push'
+import { canVibrate } from '../lib/haptics'
+import { usePushSettings } from '../lib/usePushSettings'
 import { startAutoRefresh, onRefresh, requestRefresh } from '../lib/refresh'
 import { getText, setText } from '../lib/storage'
 import UsernameForm from '../components/UsernameForm'
@@ -61,10 +62,7 @@ export default function Home({ session }) {
   const [showSettings, setShowSettings] = useState(false)
   const [status, setStatus] = useState(() => loadStatus(userId))
   const [muted, setMutedState] = useState(isMuted)
-  const [vibrate, setVibrate] = useState(isVibrateOn)
   const [shaking, setShaking] = useState(false)
-  const [pushOn, setPushOn] = useState(false)
-  const [pushMsg, setPushMsg] = useState('')
   const shakeTimer = useRef(null)
 
   const deviceId = device?.status === 'ok' ? device.deviceId : null
@@ -79,6 +77,11 @@ export default function Home({ session }) {
     friends,
   })
   const { alertDevices, handleReviewed, dismissAlert } = useDeviceAlerts({
+    userId,
+    deviceId,
+    ready,
+  })
+  const { pushOn, pushMsg, togglePush, vibrate, toggleVibrate } = usePushSettings({
     userId,
     deviceId,
     ready,
@@ -120,63 +123,9 @@ export default function Home({ session }) {
     setMutedState(next)
   }
 
-  function toggleVibrate() {
-    const next = !vibrate
-    setVibrateOn(next)
-    setVibrate(next)
-    if (!next) {
-      setPushMsg('Vibration is off.')
-      return
-    }
-    const result = testVibrate()
-    setPushMsg(
-      result === 'sent'
-        ? 'Test vibration sent. If you felt nothing, check your phone: silent mode, Do Not Disturb, battery saver, or the system vibration and haptic settings.'
-        : result === 'unsupported'
-          ? "This browser can't vibrate. Use Chrome or Edge on Android."
-          : 'The browser blocked the vibration. Tap the page, keep this tab in front, and try again.'
-    )
-  }
-
   function handlePrivacyChange(patch) {
     if ('share_seen' in patch) setShareSeen(patch.share_seen)
     if ('share_typing' in patch) setShareTyping(patch.share_typing)
-  }
-
-  // ----- Notifications -----
-  useEffect(() => {
-    if (!ready) return
-    let cancelled = false
-    pushStatus(userId, deviceId)
-      .then((on) => !cancelled && setPushOn(on))
-      .catch(() => !cancelled && setPushOn(false))
-    return () => {
-      cancelled = true
-    }
-  }, [ready, userId, deviceId])
-
-  async function togglePush() {
-    setPushMsg('')
-    if (!pushSupported()) {
-      setPushMsg(
-        "Notifications aren't available in this browser. On iPhone or iPad, tap Share → " +
-          'Add to Home Screen first, then open the app from the Home Screen.'
-      )
-      return
-    }
-    try {
-      if (pushOn) {
-        await disablePush(userId, deviceId)
-        setPushOn(false)
-        setPushMsg('Notifications are off for this device.')
-      } else {
-        await enablePush(userId, deviceId)
-        setPushOn(true)
-        setPushMsg('Notifications are on for this device.')
-      }
-    } catch (e) {
-      setPushMsg(e.message)
-    }
   }
 
   // Open the right chat when a notification is clicked
