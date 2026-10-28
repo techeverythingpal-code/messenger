@@ -1,31 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createDirectory } from '../lib/deviceDirectory'
 import { MAX_MESSAGE_CHARS } from '../crypto/encrypt'
-import { PICKER } from '../lib/emoticons'
 import { useTyping } from '../lib/useTyping'
-import { REPLY_OVERHEAD, stripControls, snippetOf, buildReply } from './chat/protocol'
+import { REPLY_OVERHEAD, buildReply } from './chat/protocol'
 import { useChatSync } from './chat/useChatSync'
 import { useMarkSeen } from './chat/useMarkSeen'
 import { useSendMessage } from './chat/useSendMessage'
 import { visibleMessages, reactionsByMessage, lastReadId } from './chat/derive'
 import MessageLine from './chat/MessageLine'
 import ChatHeader from './chat/ChatHeader'
+import Composer from './chat/Composer'
 
 export default function Chat({
   myId, myName, deviceId, myPrivateKey, contact, status, expireAfter,
   shareSeen, shareTyping, onExpiryChanged, onSeen, onBuzz, onClose,
 }) {
-  const [text, setText] = useState('')
-
   const [error, setError] = useState('')
-  const [showPicker, setShowPicker] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
   const [selected, setSelected] = useState(null) // the message whose Reply / React bar is open
   const [replyToId, setReplyToId] = useState(null) // msg_id of the message I'm replying to
 
   const listRef = useRef(null)
-  const inputRef = useRef(null)
 
   const onBuzzRef = useRef(onBuzz)
   useEffect(() => {
@@ -81,10 +77,8 @@ export default function Chat({
     myId, deviceId, myPrivateKey, contact, dir, addMessages, setError, onBuzzRef,
   })
 
-  async function handleSend(e) {
-    e.preventDefault()
-    const t = stripControls(text).trim()
-    if (!t || sending) return
+  // Composer hands me the cleaned text; I only clear its box after a successful send
+  async function handleSend(t, onSent) {
     let plain = t
     if (replyTarget) {
       if (t.length > MAX_MESSAGE_CHARS - REPLY_OVERHEAD) {
@@ -94,7 +88,7 @@ export default function Chat({
       plain = buildReply(replyTarget.msgId, t)
     }
     await sendMessage(plain, () => {
-      setText('')
+      onSent()
       setReplyToId(null)
       stopTyping()
     })
@@ -103,7 +97,6 @@ export default function Chat({
   function startReply(m) {
     setReplyToId(m.msgId)
     setSelected(null)
-    inputRef.current?.focus()
   }
 
   // Tapping my current reaction again removes it; another emoji replaces it
@@ -112,21 +105,6 @@ export default function Chat({
     const next = reactionsOf.get(m.msgId)?.me === emoji ? '' : emoji
     setSelected(null)
     return sendReaction(m.msgId, next)
-  }
-
-  function insertEmoji(emoji) {
-    const el = inputRef.current
-    const start = el?.selectionStart ?? text.length
-    const end = el?.selectionEnd ?? start
-    const next = text.slice(0, start) + emoji + text.slice(end)
-    if (next.length > MAX_MESSAGE_CHARS) return
-    setText(next)
-    setShowPicker(false)
-    requestAnimationFrame(() => {
-      el?.focus()
-      const pos = start + emoji.length
-      el?.setSelectionRange(pos, pos)
-    })
   }
 
   return (
@@ -164,48 +142,15 @@ export default function Chat({
 
       <div className="typing">{peerTyping ? `@${contact.username} is typing…` : ''}</div>
 
-      {showPicker && (
-        <div className="picker">
-          {PICKER.map((emo) => (
-            <button key={emo} type="button" className="emo" onClick={() => insertEmoji(emo)}>
-              {emo}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="toolbar">
-        <button type="button" onClick={() => setShowPicker((s) => !s)}>😊 Emoticons</button>
-        <button type="button" onClick={sendBuzz} disabled={sending}>📳 Buzz!</button>
-      </div>
-
-      {replyTarget && (
-        <div className="replybar">
-          <span>
-            ↩ Replying to{' '}
-            <strong>{replyTarget.mine ? 'yourself' : `@${contact.username}`}</strong>:{' '}
-            {snippetOf(replyTarget)}
-          </span>
-          <button type="button" className="rbtn" onClick={() => setReplyToId(null)}>
-            ✕
-          </button>
-        </div>
-      )}
-
-      <form className="row" onSubmit={handleSend}>
-        <input
-          ref={inputRef}
-          placeholder="Type a message"
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            if (e.target.value) notifyTyping()
-          }}
-          maxLength={replyTarget ? MAX_MESSAGE_CHARS - REPLY_OVERHEAD : MAX_MESSAGE_CHARS}
-          autoComplete="off"
-        />
-        <button type="submit" disabled={sending}>Send</button>
-      </form>
+      <Composer
+        replyTarget={replyTarget}
+        contactUsername={contact.username}
+        sending={sending}
+        onSend={handleSend}
+        onCancelReply={() => setReplyToId(null)}
+        onTyping={notifyTyping}
+        onBuzz={sendBuzz}
+      />
       {error && <p className="msg">{error}</p>}
     </div>
   )
