@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { APP_NAME } from '../lib/appInfo'
 
 export default function SetNewPassword({ onDone }) {
   const [password, setPassword] = useState('')
@@ -37,7 +38,7 @@ export default function SetNewPassword({ onDone }) {
 
   return (
     <div className="card">
-      <h1>Millennials Messenger</h1>
+      <h1>{APP_NAME}</h1>
       <h2>Choose a new password</h2>
       <p className="hint">
         After saving, your other signed-in devices will be signed out and will need the

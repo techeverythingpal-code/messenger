@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase, emailLinkFailed } from '../lib/supabase'
+import { APP_NAME } from '../lib/appInfo'
 
 const COOLDOWN_SECONDS = 60
 const LINK_MESSAGE = 'That email link is invalid or has expired. Please request a new one.'
@@ -101,7 +102,7 @@ export default function Auth() {
 
   return (
     <div className="card">
-      <h1>Millennials Messenger</h1>
+      <h1>{APP_NAME}</h1>
       <h2>{title}</h2>
 
       {mode === 'forgot' && (

@@ -18,6 +18,7 @@ import Chat from '../components/Chat'
 import Devices from '../components/Devices'
 import Settings from '../components/Settings'
 import DeleteAccount from '../components/DeleteAccount'
+import { APP_NAME } from '../lib/appInfo'
 
 async function loadEverything(userId) {
   const device = await ensureDevice(userId)
@@ -198,7 +199,7 @@ export default function Home({ session }) {
   return (
     <div className={`window ${ready ? 'wide' : ''} ${shaking ? 'shake' : ''}`}>
       <div className="titlebar">
-        <span>😎 Millennials Messenger</span>
+        <span>😎 {APP_NAME}</span>
         <span className="muted-light">end-to-end encrypted</span>
       </div>
 

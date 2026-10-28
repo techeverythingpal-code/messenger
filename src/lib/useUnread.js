@@ -4,6 +4,7 @@ import { getJSON, setJSON } from './storage'
 import { playMessage } from './sounds'
 import { vibrateMessage } from './haptics'
 import { setTabBadge } from './tabBadge'
+import { APP_NAME } from './appInfo'
 
 // "Last message I've read" per contact, kept on this device only
 const readMap = (userId) => getJSON(`lastread:${userId}`, {})
@@ -103,7 +104,7 @@ export function useUnread({ userId, deviceId, ready, openContactId, friends }) {
   // Unread total: browser tab title and tab icon badge
   const totalUnread = friends.reduce((n, f) => n + (unread[f.id] || 0), 0)
   useEffect(() => {
-    document.title = totalUnread ? `(${totalUnread}) Millennials Messenger` : 'Millennials Messenger'
+    document.title = totalUnread ? `(${totalUnread}) ${APP_NAME}` : APP_NAME
     setTabBadge(totalUnread)
   }, [totalUnread])
 
