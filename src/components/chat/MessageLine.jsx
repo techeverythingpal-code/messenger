@@ -30,7 +30,7 @@ export default function MessageLine({
   if (m.buzz) {
     return (
       <div className="line system">
-        📳 {m.mine ? 'You buzzed' : `@${friendName} buzzed you`}!
+        📳zzz {m.mine ? 'You buzzed' : `@${friendName} buzzed you`}!
         <time>{fmt(m.time)}</time>
         <Eyes label={eye} />
       </div>
