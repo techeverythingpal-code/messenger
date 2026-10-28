@@ -1,23 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import { createDirectory } from '../lib/deviceDirectory'
-import { buildCopies, MAX_MESSAGE_CHARS } from '../crypto/encrypt'
+import { MAX_MESSAGE_CHARS } from '../crypto/encrypt'
 import { PICKER } from '../lib/emoticons'
-import { playBuzz } from '../lib/sounds'
-import { vibrateBuzz } from '../lib/haptics'
 import { useTyping } from '../lib/useTyping'
-import {
-  BUZZ_TOKEN, REPLY_OVERHEAD,
-  stripControls, snippetOf, buildReply, buildReaction,
-} from './chat/protocol'
-import { toView } from './chat/messageView'
+import { REPLY_OVERHEAD, stripControls, snippetOf, buildReply } from './chat/protocol'
 import { useChatSync } from './chat/useChatSync'
 import { useMarkSeen } from './chat/useMarkSeen'
+import { useSendMessage } from './chat/useSendMessage'
 import { visibleMessages, reactionsByMessage, lastReadId } from './chat/derive'
 import MessageLine from './chat/MessageLine'
 import ChatHeader from './chat/ChatHeader'
-
-const BUZZ_COOLDOWN_MS = 10000
 
 export default function Chat({
   myId, myName, deviceId, myPrivateKey, contact, status, expireAfter,
@@ -26,7 +18,6 @@ export default function Chat({
   const [text, setText] = useState('')
 
   const [error, setError] = useState('')
-  const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
@@ -35,7 +26,6 @@ export default function Chat({
 
   const listRef = useRef(null)
   const inputRef = useRef(null)
-  const lastBuzzSent = useRef(0)
 
   const onBuzzRef = useRef(onBuzz)
   useEffect(() => {
@@ -87,42 +77,9 @@ export default function Chat({
   // receipts, while the window is actually focused)
   useMarkSeen({ messages, shareSeen, contactId: contact.id, onSeen, bumpMyReadUntil })
 
-  async function sendText(plain, kind = 'msg') {
-    // Fresh device list, so brand-new devices get this message too
-    const devs = await dir.refresh()
-    if (!devs.some((d) => d.user_id === contact.id)) {
-      throw new Error(`@${contact.username} hasn't set up encryption on any device yet.`)
-    }
-    if (!devs.some((d) => d.id === deviceId)) {
-      throw new Error('This device is no longer registered. Log out and log in again.')
-    }
-
-    const { msgId, rows } = await buildCopies({
-      myPrivateKey,
-      myId,
-      myDeviceId: deviceId,
-      friendId: contact.id,
-      devices: devs,
-      text: plain,
-      kind,
-    })
-
-    // All copies go in one request, so it either all works or none of it does
-    const { error } = await supabase.from('messages').insert(rows)
-    if (error) throw error
-
-    // Read back MY copy, to show it with its real id and time
-    const { data, error: e2 } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('msg_id', msgId)
-      .eq('target_device', deviceId)
-      .single()
-    if (e2) throw e2
-
-    const view = await toView(data, myId, myPrivateKey, dir)
-    addMessages([view])
-  }
+  const { sending, sendMessage, sendBuzz, sendReaction } = useSendMessage({
+    myId, deviceId, myPrivateKey, contact, dir, addMessages, setError, onBuzzRef,
+  })
 
   async function handleSend(e) {
     e.preventDefault()
@@ -136,40 +93,11 @@ export default function Chat({
       }
       plain = buildReply(replyTarget.msgId, t)
     }
-    setSending(true)
-    setError('')
-    try {
-      await sendText(plain)
+    await sendMessage(plain, () => {
       setText('')
       setReplyToId(null)
       stopTyping()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSending(false)
-    }
-  }
-
-  async function handleBuzz() {
-    if (sending) return
-    const wait = BUZZ_COOLDOWN_MS - (Date.now() - lastBuzzSent.current)
-    if (wait > 0) {
-      setError(`Please wait ${Math.ceil(wait / 1000)}s before buzzing again.`)
-      return
-    }
-    setSending(true)
-    setError('')
-    try {
-      await sendText(BUZZ_TOKEN)
-      lastBuzzSent.current = Date.now()
-      vibrateBuzz() // the sender feels it too
-      onBuzzRef.current() // and sees their own window shake
-      playBuzz() // and hears the buzz sound
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSending(false)
-    }
+    })
   }
 
   function startReply(m) {
@@ -179,19 +107,11 @@ export default function Chat({
   }
 
   // Tapping my current reaction again removes it; another emoji replaces it
-  async function handleReact(m, emoji) {
+  function handleReact(m, emoji) {
     if (sending) return
     const next = reactionsOf.get(m.msgId)?.me === emoji ? '' : emoji
     setSelected(null)
-    setSending(true)
-    setError('')
-    try {
-      await sendText(buildReaction(m.msgId, next), 'react')
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSending(false)
-    }
+    return sendReaction(m.msgId, next)
   }
 
   function insertEmoji(emoji) {
@@ -256,7 +176,7 @@ export default function Chat({
 
       <div className="toolbar">
         <button type="button" onClick={() => setShowPicker((s) => !s)}>😊 Emoticons</button>
-        <button type="button" onClick={handleBuzz} disabled={sending}>📳 Buzz!</button>
+        <button type="button" onClick={sendBuzz} disabled={sending}>📳 Buzz!</button>
       </div>
 
       {replyTarget && (
