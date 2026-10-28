@@ -1,8 +1,10 @@
+import { memo } from 'react'
 import Linkified from '../../lib/linkify'
 import { REACTIONS, stripControls, snippetOf, reactChips } from './protocol'
 
-const fmt = (t) =>
-  new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+// Built once, not on every render of every line
+const timeFmt = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' })
+const fmt = (t) => timeFmt.format(new Date(t))
 
 // The 👁 shown under the last message each of us has read
 function Eyes({ label }) {
@@ -23,8 +25,8 @@ function Eyes({ label }) {
 //   reactions  { me, them } emoji for this message, or undefined
 //   eye        who has "seen up to here": a name, 'You', or null
 //   selected   whether the Reply / React bar is open on this message
-//   onToggle, onReply, onReact(emoji)
-export default function MessageLine({
+//   onToggle(id), onReply(m), onReact(m, emoji)  -- must be stable (useCallback)
+function MessageLine({
   m, myName, friendName, quoted, reactions, eye, selected, onToggle, onReply, onReact,
 }) {
   if (m.buzz) {
@@ -40,7 +42,7 @@ export default function MessageLine({
   const chips = reactChips(reactions, friendName)
 
   return (
-    <div className={`line ${selected ? 'selected' : ''}`} onClick={onToggle}>
+    <div className={`line ${selected ? 'selected' : ''}`} onClick={() => onToggle(m.id)}>
       {m.replyTo && (
         <div className="quote">
           {quoted ? (
@@ -79,7 +81,7 @@ export default function MessageLine({
       )}
       {selected && m.text !== null && (
         <div className="msgbar" onClick={(e) => e.stopPropagation()}>
-          <button type="button" className="rbtn" onClick={onReply}>
+          <button type="button" className="rbtn" onClick={() => onReply(m)}>
             ↩ Reply
           </button>
           {REACTIONS.map((emo) => (
@@ -87,7 +89,7 @@ export default function MessageLine({
               key={emo}
               type="button"
               className={`rbtn ${reactions?.me === emo ? 'on' : ''}`}
-              onClick={() => onReact(emo)}
+              onClick={() => onReact(m, emo)}
             >
               {emo}
             </button>
@@ -98,3 +100,5 @@ export default function MessageLine({
     </div>
   )
 }
+
+export default memo(MessageLine)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createDirectory } from '../lib/deviceDirectory'
 import { MAX_MESSAGE_CHARS } from '../crypto/encrypt'
 import { useTyping } from '../lib/useTyping'
@@ -47,9 +47,14 @@ export default function Chat({
     const t = setInterval(() => setNow(Date.now()), 30000)
     return () => clearInterval(t)
   }, [])
-  // Reactions are not lines of their own, so they are left out of the list
-  const visible = visibleMessages(messages, now, expireAfter)
-  const byMsgId = new Map(visible.map((m) => [m.msgId, m]))
+
+  // Reactions are not lines of their own, so they are left out of the list.
+  // Memoised so the same message objects are reused until something really changes.
+  const visible = useMemo(
+    () => visibleMessages(messages, now, expireAfter),
+    [messages, now, expireAfter]
+  )
+  const byMsgId = useMemo(() => new Map(visible.map((m) => [m.msgId, m])), [visible])
   const replyTarget = replyToId ? byMsgId.get(replyToId) : null
 
   // Latest reaction of each person on each message: msg_id -> { me, them }
@@ -94,11 +99,6 @@ export default function Chat({
     })
   }
 
-  function startReply(m) {
-    setReplyToId(m.msgId)
-    setSelected(null)
-  }
-
   // Tapping my current reaction again removes it; another emoji replaces it
   function handleReact(m, emoji) {
     if (sending) return
@@ -106,6 +106,20 @@ export default function Chat({
     setSelected(null)
     return sendReaction(m.msgId, next)
   }
+
+  // Keep the newest handleReact in a ref so the function I give every
+  // MessageLine never changes (otherwise React.memo could not skip them)
+  const handleReactRef = useRef(handleReact)
+  useEffect(() => {
+    handleReactRef.current = handleReact
+  })
+
+  const onToggle = useCallback((id) => setSelected((s) => (s === id ? null : id)), [])
+  const onReply = useCallback((m) => {
+    setReplyToId(m.msgId)
+    setSelected(null)
+  }, [])
+  const onReact = useCallback((m, emo) => handleReactRef.current(m, emo), [])
 
   return (
     <div>
@@ -133,9 +147,9 @@ export default function Chat({
             reactions={reactionsOf.get(m.msgId)}
             eye={eyeLabel(m)}
             selected={selected === m.id}
-            onToggle={() => setSelected((s) => (s === m.id ? null : m.id))}
-            onReply={() => startReply(m)}
-            onReact={(emo) => handleReact(m, emo)}
+            onToggle={onToggle}
+            onReply={onReply}
+            onReact={onReact}
           />
         ))}
       </div>
