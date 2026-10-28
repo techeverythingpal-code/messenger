@@ -332,6 +332,13 @@ export default function Home({ session }) {
     setShowSettings(true)
   }
 
+  // Clicking a contact: close Devices / Settings and show that chat
+  function openContact(c) {
+    setShowDevices(false)
+    setShowSettings(false)
+    setContact(c)
+  }
+
   // ----- Unread counts -----
   const refreshUnread = useCallback(() => {
     if (!deviceId) return Promise.resolve()
@@ -429,11 +436,11 @@ export default function Home({ session }) {
   }
 
   const myDot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
-  const onList = ready && !contact && !showDevices && !showSettings
-  const inChat = ready && contact && !showDevices && !showSettings
+  // On a narrow screen the right-hand pane replaces the list while it is open
+  const paneOpen = showDevices || showSettings || !!contact
 
   return (
-    <div className={`window ${shaking ? 'shake' : ''}`}>
+    <div className={`window ${ready ? 'wide' : ''} ${shaking ? 'shake' : ''}`}>
       <div className="titlebar">
         <span>😎 Millennials Messenger</span>
         <span className="muted-light">end-to-end encrypted</span>
@@ -521,62 +528,64 @@ export default function Home({ session }) {
           <UsernameForm userId={userId} onSaved={setUsername} />
         )}
 
-        {ready && showDevices && (
-          <Devices
-            userId={userId}
-            deviceId={deviceId}
-            onReviewed={handleReviewed}
-            onBack={() => setShowDevices(false)}
-          />
-        )}
+        {ready && (
+          <div className={`split ${paneOpen ? 'open' : ''}`}>
+            <div className="side">
+              <ContactList
+                myId={userId}
+                friends={friends}
+                incoming={incoming}
+                outgoing={outgoing}
+                online={online}
+                unread={unread}
+                onOpen={openContact}
+                reload={reload}
+              />
+              <div className="ok">
+                <strong>This device: {device.name}</strong>
+                <code className="fp">{device.fingerprint}</code>
+              </div>
+            </div>
 
-        {ready && showSettings && (
-          <Settings
-            userId={userId}
-            email={session.user.email}
-            shareSeen={shareSeen}
-            shareTyping={shareTyping}
-            onPrivacyChange={handlePrivacyChange}
-            onBack={() => setShowSettings(false)}
-          />
-        )}
-
-        {onList && (
-          <div>
-            <ContactList
-              myId={userId}
-              friends={friends}
-              incoming={incoming}
-              outgoing={outgoing}
-              online={online}
-              unread={unread}
-              onOpen={setContact}
-              reload={reload}
-            />
-            <div className="ok">
-              <strong>This device: {device.name}</strong>
-              <code className="fp">{device.fingerprint}</code>
+            <div className="main">
+              {showDevices ? (
+                <Devices
+                  userId={userId}
+                  deviceId={deviceId}
+                  onReviewed={handleReviewed}
+                  onBack={() => setShowDevices(false)}
+                />
+              ) : showSettings ? (
+                <Settings
+                  userId={userId}
+                  email={session.user.email}
+                  shareSeen={shareSeen}
+                  shareTyping={shareTyping}
+                  onPrivacyChange={handlePrivacyChange}
+                  onBack={() => setShowSettings(false)}
+                />
+              ) : contact ? (
+                <Chat
+                  key={contact.id}
+                  myId={userId}
+                  myName={username}
+                  deviceId={deviceId}
+                  myPrivateKey={device.privateKey}
+                  contact={contact}
+                  status={online.get(contact.id)}
+                  expireAfter={friends.find((f) => f.id === contact.id)?.expireAfter ?? null}
+                  shareSeen={shareSeen}
+                  shareTyping={shareTyping}
+                  onExpiryChanged={reload}
+                  onSeen={(id) => markRead(contact.id, id)}
+                  onBuzz={shake}
+                  onClose={() => setContact(null)}
+                />
+              ) : (
+                <p className="empty">Pick a contact on the left to open your messages.</p>
+              )}
             </div>
           </div>
-        )}
-
-        {inChat && (
-          <Chat
-            key={contact.id}
-            myId={userId}
-            myName={username}
-            deviceId={deviceId}
-            myPrivateKey={device.privateKey}
-            contact={contact}
-            status={online.get(contact.id)}
-            expireAfter={friends.find((f) => f.id === contact.id)?.expireAfter ?? null}
-            shareSeen={shareSeen}
-            shareTyping={shareTyping}
-            onExpiryChanged={reload}
-            onSeen={(id) => markRead(contact.id, id)}
-            onBuzz={shake}
-            onClose={() => setContact(null)}
-          />
         )}
       </div>
 
