@@ -12,39 +12,32 @@ import {
 } from './chat/protocol'
 import { toView } from './chat/messageView'
 import { useChatSync } from './chat/useChatSync'
+import { visibleMessages, reactionsByMessage, lastReadId } from './chat/derive'
 import MessageLine from './chat/MessageLine'
 import ChatHeader from './chat/ChatHeader'
+
 const BUZZ_COOLDOWN_MS = 10000
-
-
-
-
-
-
 
 export default function Chat({
   myId, myName, deviceId, myPrivateKey, contact, status, expireAfter,
   shareSeen, shareTyping, onExpiryChanged, onSeen, onBuzz, onClose,
 }) {
- 
   const [text, setText] = useState('')
-  
+
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   const [now, setNow] = useState(() => Date.now())
-  
-  
-  
+
   const [selected, setSelected] = useState(null) // the message whose Reply / React bar is open
   const [replyToId, setReplyToId] = useState(null) // msg_id of the message I'm replying to
 
   const listRef = useRef(null)
   const inputRef = useRef(null)
   const lastBuzzSent = useRef(0)
-  
+
   const lastMarkRef = useRef(0)
-  
+
   const onSeenRef = useRef(onSeen)
   const onBuzzRef = useRef(onBuzz)
   useEffect(() => {
@@ -53,7 +46,7 @@ export default function Chat({
   })
 
   const dir = useMemo(() => createDirectory(myId, contact.id), [myId, contact.id])
-    const { peerTyping, notifyTyping, stopTyping, clearTyping } = useTyping(
+  const { peerTyping, notifyTyping, stopTyping, clearTyping } = useTyping(
     myId,
     contact.id,
     shareTyping
@@ -72,50 +65,21 @@ export default function Chat({
     return () => clearInterval(t)
   }, [])
   // Reactions are not lines of their own, so they are left out of the list
-  const visible = messages.filter(
-    (m) => !m.react && (!expireAfter || new Date(m.time).getTime() > now - expireAfter * 1000)
-  )
+  const visible = visibleMessages(messages, now, expireAfter)
   const byMsgId = new Map(visible.map((m) => [m.msgId, m]))
   const replyTarget = replyToId ? byMsgId.get(replyToId) : null
 
   // Latest reaction of each person on each message: msg_id -> { me, them }
-  const reactionsOf = useMemo(() => {
-    const latest = new Map()
-    for (const m of messages) {
-      if (m.react) latest.set(`${m.react.target}|${m.mine}`, m.react.emoji)
-    }
-    const out = new Map()
-    for (const [key, emoji] of latest) {
-      if (!emoji) continue
-      const [target, mine] = key.split('|')
-      const cur = out.get(target) || { me: '', them: '' }
-      if (mine === 'true') cur.me = emoji
-      else cur.them = emoji
-      out.set(target, cur)
-    }
-    return out
-  }, [messages])
+  const reactionsOf = useMemo(() => reactionsByMessage(messages), [messages])
 
   // Seen ticks only show if I share my own receipts too
   const seenCutoff = shareSeen ? readUntil : null
 
   // Teams-style eyes: one 👁 under the last message each of us has read
-  function lastReadId(cutoff, mine) {
-    if (cutoff === null) return null
-    let id = null
-    for (const m of visible) {
-      if (m.mine === mine && new Date(m.time).getTime() <= cutoff) id = m.id
-    }
-    return id
-  }
-  const friendEyeId = lastReadId(seenCutoff, true) // my last message my friend read
-  const myEyeId = lastReadId(shareSeen ? myReadUntil : null, false) // their last message I read
+  const friendEyeId = lastReadId(visible, seenCutoff, true) // my last message my friend read
+  const myEyeId = lastReadId(visible, shareSeen ? myReadUntil : null, false) // their last message I read
   const eyeLabel = (m) =>
     m.id === friendEyeId ? `@${contact.username}` : m.id === myEyeId ? 'You' : null
-
-  
-
- 
 
   useEffect(() => {
     const el = listRef.current
@@ -140,7 +104,7 @@ export default function Chat({
           .rpc('mark_read', { p_peer: contact.id, p_until: new Date(latest).toISOString() })
           .then(({ error }) => {
             if (error) lastMarkRef.current = 0 // try again next time
-              else bumpMyReadUntil(latest)
+            else bumpMyReadUntil(latest)
           })
       }
     }
@@ -151,7 +115,7 @@ export default function Chat({
       document.removeEventListener('visibilitychange', markSeen)
       window.removeEventListener('focus', markSeen)
     }
-  },   [messages, shareSeen, contact.id, bumpMyReadUntil])
+  }, [messages, shareSeen, contact.id, bumpMyReadUntil])
 
   async function sendText(plain, kind = 'msg') {
     // Fresh device list, so brand-new devices get this message too
@@ -187,7 +151,7 @@ export default function Chat({
     if (e2) throw e2
 
     const view = await toView(data, myId, myPrivateKey, dir)
-      addMessages([view])
+    addMessages([view])
   }
 
   async function handleSend(e) {
@@ -260,8 +224,6 @@ export default function Chat({
     }
   }
 
-  
-
   function insertEmoji(emoji) {
     const el = inputRef.current
     const start = el?.selectionStart ?? text.length
@@ -277,11 +239,9 @@ export default function Chat({
     })
   }
 
-  
-
   return (
     <div>
-            <ChatHeader
+      <ChatHeader
         contact={contact}
         status={status}
         contactDevices={contactDevices}
@@ -295,7 +255,7 @@ export default function Chat({
 
       <div className="log" ref={listRef}>
         {visible.length === 0 && <p className="empty">No messages yet. Say hi!</p>}
-               {visible.map((m) => (
+        {visible.map((m) => (
           <MessageLine
             key={m.id}
             m={m}
