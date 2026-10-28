@@ -447,48 +447,52 @@ export default function Home({ session }) {
       </div>
 
       <div className="profilebar">
-        <span className={`dot ${myDot}`} />
-        <span className="name">{username ? `@${username}` : session.user.email}</span>
-        {ready && (
-          <select value={status} onChange={(e) => changeStatus(e.target.value)}>
-            {STATUSES.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
-        )}
-        {ready && (
-          <>
-            <button
-              className="icon"
-              onClick={togglePush}
-              title={pushOn ? 'Notifications on (click to turn off)' : 'Turn on notifications'}
-            >
-              {pushOn ? '🔔' : '🔕'}
-            </button>
-            <button className="icon" onClick={openDevices} title="My devices">
-              💻
-            </button>
-            <button className="icon" onClick={openSettings} title="Settings">
-              ⚙️
-            </button>
-          </>
-        )}
-        <button
-          className="icon"
-          onClick={toggleMute}
-          title={muted ? 'Sounds off' : 'Sounds on'}
-        >
-          {muted ? '🔇' : '🔊'}
-        </button>
-        {canVibrate() && (
+        <div className="who">
+          <span className={`dot ${myDot}`} />
+          <span className="name">{username ? `@${username}` : session.user.email}</span>
+          {ready && (
+            <select value={status} onChange={(e) => changeStatus(e.target.value)}>
+              {STATUSES.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          )}
+        </div>
+        <div className="tools">
+          {ready && (
+            <>
+              <button
+                className="icon"
+                onClick={togglePush}
+                title={pushOn ? 'Notifications on (click to turn off)' : 'Turn on notifications'}
+              >
+                {pushOn ? '🔔' : '🔕'}
+              </button>
+              <button className="icon" onClick={openDevices} title="My devices">
+                💻
+              </button>
+              <button className="icon" onClick={openSettings} title="Settings">
+                ⚙️
+              </button>
+            </>
+          )}
           <button
             className="icon"
-            onClick={toggleVibrate}
-            title={vibrate ? 'Vibration on' : 'Vibration off'}
+            onClick={toggleMute}
+            title={muted ? 'Sounds off' : 'Sounds on'}
           >
-            {vibrate ? '📳' : '📴'}
+            {muted ? '🔇' : '🔊'}
           </button>
-        )}
+          {canVibrate() && (
+            <button
+              className="icon"
+              onClick={toggleVibrate}
+              title={vibrate ? 'Vibration on' : 'Vibration off'}
+            >
+              {vibrate ? '📳' : '📴'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="wbody">
@@ -545,6 +549,9 @@ export default function Home({ session }) {
                 <strong>This device: {device.name}</strong>
                 <code className="fp">{device.fingerprint}</code>
               </div>
+              <button className="secondary logout" onClick={handleLogout}>
+                Log out
+              </button>
             </div>
 
             <div className="main">
@@ -590,9 +597,11 @@ export default function Home({ session }) {
       </div>
 
       <div className="footer">
-        <button className="secondary" onClick={handleLogout}>
-          Log out
-        </button>
+        {!ready && (
+          <button className="secondary" onClick={handleLogout}>
+            Log out
+          </button>
+        )}
         <DeleteAccount userId={userId} email={session.user.email} />
       </div>
     </div>
