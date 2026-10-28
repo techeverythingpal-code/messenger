@@ -1,4 +1,4 @@
-import { withEmoticons } from '../../lib/emoticons'
+import Linkified from '../../lib/linkify'
 import { REACTIONS, stripControls, snippetOf, reactChips } from './protocol'
 
 const fmt = (t) =>
@@ -59,7 +59,7 @@ export default function MessageLine({
       {m.text === null ? (
         <em className="bad">🔒 Can't decrypt this message</em>
       ) : (
-        withEmoticons(stripControls(m.text))
+        <Linkified text={stripControls(m.text)} />
       )}
       <time>{fmt(m.time)}</time>
       {m.mine && <span className="tick" title="Sent">✓</span>}
