@@ -12,6 +12,7 @@ import {
 } from './chat/protocol'
 import { toView } from './chat/messageView'
 import { useChatSync } from './chat/useChatSync'
+import { useMarkSeen } from './chat/useMarkSeen'
 import { visibleMessages, reactionsByMessage, lastReadId } from './chat/derive'
 import MessageLine from './chat/MessageLine'
 import ChatHeader from './chat/ChatHeader'
@@ -36,12 +37,8 @@ export default function Chat({
   const inputRef = useRef(null)
   const lastBuzzSent = useRef(0)
 
-  const lastMarkRef = useRef(0)
-
-  const onSeenRef = useRef(onSeen)
   const onBuzzRef = useRef(onBuzz)
   useEffect(() => {
-    onSeenRef.current = onSeen
     onBuzzRef.current = onBuzz
   })
 
@@ -88,34 +85,7 @@ export default function Chat({
 
   // Mark messages as read, but only while this tab is visible (and, for read
   // receipts, while the window is actually focused)
-  useEffect(() => {
-    function markSeen() {
-      if (document.hidden || !messages.length) return
-      onSeenRef.current(messages[messages.length - 1].id)
-
-      if (!shareSeen || !document.hasFocus()) return
-      let latest = 0
-      for (const m of messages) {
-        if (!m.mine) latest = Math.max(latest, new Date(m.time).getTime())
-      }
-      if (latest > lastMarkRef.current) {
-        lastMarkRef.current = latest
-        supabase
-          .rpc('mark_read', { p_peer: contact.id, p_until: new Date(latest).toISOString() })
-          .then(({ error }) => {
-            if (error) lastMarkRef.current = 0 // try again next time
-            else bumpMyReadUntil(latest)
-          })
-      }
-    }
-    markSeen()
-    document.addEventListener('visibilitychange', markSeen)
-    window.addEventListener('focus', markSeen)
-    return () => {
-      document.removeEventListener('visibilitychange', markSeen)
-      window.removeEventListener('focus', markSeen)
-    }
-  }, [messages, shareSeen, contact.id, bumpMyReadUntil])
+  useMarkSeen({ messages, shareSeen, contactId: contact.id, onSeen, bumpMyReadUntil })
 
   async function sendText(plain, kind = 'msg') {
     // Fresh device list, so brand-new devices get this message too
