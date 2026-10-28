@@ -4,11 +4,12 @@ import { ensureDevice } from '../crypto/identity'
 import { deleteKeyPair } from '../crypto/keys'
 import { useContacts } from '../lib/useContacts'
 import { usePresence } from '../lib/usePresence'
-import { isMuted, setMuted, playMessage } from '../lib/sounds'
-import { setTabBadge } from '../lib/tabBadge'
+import { useUnread } from '../lib/useUnread'
+import { isMuted, setMuted } from '../lib/sounds'
 import { pushSupported, pushStatus, enablePush, disablePush, pausePush } from '../lib/push'
-import { canVibrate, isVibrateOn, setVibrateOn, vibrateMessage, testVibrate } from '../lib/haptics'
+import { canVibrate, isVibrateOn, setVibrateOn, testVibrate } from '../lib/haptics'
 import { startAutoRefresh, onRefresh, requestRefresh } from '../lib/refresh'
+import { getText, setText, getJSON, setJSON } from '../lib/storage'
 import UsernameForm from '../components/UsernameForm'
 import ContactList from '../components/ContactList'
 import Chat from '../components/Chat'
@@ -23,48 +24,17 @@ const STATUSES = [
 ]
 
 function loadStatus(userId) {
-  try {
-    const s = localStorage.getItem(`status:${userId}`)
-    return STATUSES.some((x) => x.value === s) ? s : 'available'
-  } catch {
-    return 'available'
-  }
-}
-
-// "Last message I've read" per contact, kept on this device only
-const readKey = (userId) => `lastread:${userId}`
-function readMap(userId) {
-  try {
-    return JSON.parse(localStorage.getItem(readKey(userId))) || {}
-  } catch {
-    return {}
-  }
-}
-function writeMap(userId, map) {
-  try {
-    localStorage.setItem(readKey(userId), JSON.stringify(map))
-  } catch {
-    /* storage unavailable: unread counts just won't persist */
-  }
+  const s = getText(`status:${userId}`)
+  return STATUSES.some((x) => x.value === s) ? s : 'available'
 }
 
 // Which of my devices I have already seen, kept on this device only
-const seenKey = (userId) => `devices-seen:${userId}`
-function readSeen(userId) {
-  try {
-    const v = JSON.parse(localStorage.getItem(seenKey(userId)))
-    return Array.isArray(v) ? v : null
-  } catch {
-    return null
-  }
+// (null = this device has never recorded any)
+const readSeen = (userId) => {
+  const v = getJSON(`devices-seen:${userId}`, null)
+  return Array.isArray(v) ? v : null
 }
-function writeSeen(userId, ids) {
-  try {
-    localStorage.setItem(seenKey(userId), JSON.stringify(ids))
-  } catch {
-    /* ignore */
-  }
-}
+const writeSeen = (userId, ids) => setJSON(`devices-seen:${userId}`, ids)
 
 async function loadEverything(userId) {
   const device = await ensureDevice(userId)
@@ -97,20 +67,25 @@ export default function Home({ session }) {
   const [showDevices, setShowDevices] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [alertDevices, setAlertDevices] = useState([]) // devices added that I haven't seen
-  const [unread, setUnread] = useState({})
   const [status, setStatus] = useState(() => loadStatus(userId))
   const [muted, setMutedState] = useState(isMuted)
   const [vibrate, setVibrate] = useState(isVibrateOn)
   const [shaking, setShaking] = useState(false)
   const [pushOn, setPushOn] = useState(false)
   const [pushMsg, setPushMsg] = useState('')
-  const openRef = useRef(null)
   const shakeTimer = useRef(null)
 
   const deviceId = device?.status === 'ok' ? device.deviceId : null
   const ready = !!deviceId && !!username
   const { friends, incoming, outgoing, error: contactsError, reload } = useContacts(userId, ready)
   const online = usePresence(userId, ready, status)
+  const { unread, markRead, refreshUnread } = useUnread({
+    userId,
+    deviceId,
+    ready,
+    openContactId: contact?.id ?? null,
+    friends,
+  })
 
   function apply(r) {
     setDevice(r.device)
@@ -129,10 +104,6 @@ export default function Home({ session }) {
     }
   }, [userId])
 
-  useEffect(() => {
-    openRef.current = contact?.id ?? null
-  }, [contact])
-
   useEffect(() => () => clearTimeout(shakeTimer.current), [])
 
   const shake = useCallback(() => {
@@ -143,11 +114,7 @@ export default function Home({ session }) {
 
   function changeStatus(value) {
     setStatus(value)
-    try {
-      localStorage.setItem(`status:${userId}`, value)
-    } catch {
-      /* ignore */
-    }
+    setText(`status:${userId}`, value)
   }
 
   function toggleMute() {
@@ -178,18 +145,6 @@ export default function Home({ session }) {
     if ('share_seen' in patch) setShareSeen(patch.share_seen)
     if ('share_typing' in patch) setShareTyping(patch.share_typing)
   }
-
-  const markRead = useCallback(
-    (contactId, msgId) => {
-      const map = readMap(userId)
-      if ((map[contactId] ?? 0) < msgId) {
-        map[contactId] = msgId
-        writeMap(userId, map)
-      }
-      setUnread((prev) => (prev[contactId] ? { ...prev, [contactId]: 0 } : prev))
-    },
-    [userId]
-  )
 
   // ----- Notifications -----
   useEffect(() => {
@@ -339,35 +294,6 @@ export default function Home({ session }) {
     setContact(c)
   }
 
-  // ----- Unread counts -----
-  const refreshUnread = useCallback(() => {
-    if (!deviceId) return Promise.resolve()
-    return supabase
-      .from('messages')
-      .select('id, sender_id')
-      .eq('target_device', deviceId)
-      .neq('sender_id', userId)
-      .eq('kind', 'msg') // reactions are not unread messages
-      .order('id', { ascending: false })
-      .limit(500)
-      .then(({ data }) => {
-        if (!data) return
-        const map = readMap(userId)
-        const counts = {}
-        for (const m of data) {
-          if (m.sender_id === openRef.current) continue // the open chat marks its own messages read
-          if (m.id > (map[m.sender_id] ?? 0)) {
-            counts[m.sender_id] = (counts[m.sender_id] || 0) + 1
-          }
-        }
-        setUnread(counts)
-      })
-  }, [userId, deviceId])
-
-  useEffect(() => {
-    if (ready) refreshUnread()
-  }, [ready, refreshUnread])
-
   // ----- Keep everything fresh -----
   useEffect(() => {
     if (!ready) return
@@ -381,48 +307,6 @@ export default function Home({ session }) {
       off()
     }
   }, [ready, reload, refreshUnread])
-
-  // New messages while this device is open
-  useEffect(() => {
-    if (!ready) return
-    const channel = supabase
-      .channel(`inbox:${deviceId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `target_device=eq.${deviceId}`,
-        },
-        (payload) => {
-          const sender = payload.new.sender_id
-          if (sender === userId) return // sent from another device of mine
-          if (payload.new.kind === 'react') return // reactions are not new messages
-
-          const chatOpen = openRef.current === sender
-          // An open chat only counts as read while you can actually see this tab
-          if (chatOpen && !document.hidden) return
-
-          setUnread((prev) => ({ ...prev, [sender]: (prev[sender] || 0) + 1 }))
-          if (!chatOpen) {
-            playMessage() // an open chat plays its own sound and vibration
-            vibrateMessage()
-          }
-        }
-      )
-      .subscribe()
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [ready, userId, deviceId])
-
-  // Unread total: browser tab title and tab icon badge
-  const totalUnread = friends.reduce((n, f) => n + (unread[f.id] || 0), 0)
-  useEffect(() => {
-    document.title = totalUnread ? `(${totalUnread}) Millennials Messenger` : 'Millennials Messenger'
-    setTabBadge(totalUnread)
-  }, [totalUnread])
 
   // A removed device can only sign out. Its old key is erased, so the next
   // login (with the password) registers it fresh.
