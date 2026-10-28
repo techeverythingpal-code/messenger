@@ -171,27 +171,45 @@ button.rbtn.on { background: var(--purple-soft); border-color: var(--purple); }
 .msg-link:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; border-radius: 2px; }
 
 /* ---- Contacts on the left, chat on the right ---- */
-.split { display: block; }
-.main { min-width: 0; }
+.split { display: flex; }
+.side, .main { min-width: 0; min-height: 0; overflow-y: auto; }
+.side { flex: 1; }
+.main { flex: 1; display: flex; flex-direction: column; }
+.main > * { flex: none; }
 
 /* Narrow screens (phones): show the list OR the open pane, one at a time */
 .split.open .side { display: none; }
 .split:not(.open) .main { display: none; }
 
 @media (min-width: 800px) {
-  /* Give the messenger window more room (only when you are logged in) */
-  #root:has(.window.wide) { max-width: 960px; }
-
-  .split { display: flex; align-items: flex-start; gap: 16px; }
+  .split { gap: 16px; }
   .split .side,
   .split.open .side { display: block; flex: 0 0 280px; width: 280px; padding-right: 16px; border-right: 1px solid var(--line); }
   .split .main,
-  .split:not(.open) .main { display: block; flex: 1; min-width: 0; }
+  .split:not(.open) .main { display: flex; flex: 1; }
 
-  .main .log { height: 460px; }
   .main .chat-head button { display: none; } /* "Back" is not needed: the list is beside the chat */
   .main > .empty { margin-top: 60px; }
 }
 
-/* ---- Log out button under the contacts list ---- */
+/* ---- Log out button under the contacts list (always visible) ---- */
 .logout { margin-top: 4px; }
+.side .logout { position: sticky; bottom: 0; }
+
+/* ---- Full screen after login: only the panes scroll, not the page ---- */
+body:has(.window.wide) { padding: 0; height: 100dvh; overflow: hidden; }
+#root:has(.window.wide) { max-width: none; height: 100%; }
+
+.window.wide { height: 100%; display: flex; flex-direction: column; border: 0; border-radius: 0; box-shadow: none; }
+.window.wide .titlebar,
+.window.wide .profilebar { flex: none; }
+.window.wide .wbody { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
+.window.wide .wbody > * { flex: none; }
+.window.wide .wbody > .split { flex: 1; min-height: 240px; }
+.window.wide .footer { flex: none; padding: 4px 12px 8px; border-top: 1px solid var(--line); max-height: 50dvh; overflow-y: auto; }
+.window.wide .dangerzone { margin-top: 0; border-top: 0; padding-top: 0; }
+
+/* The open chat: the message log takes all the free height */
+.main > div:has(> .log) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.main > div:has(> .log) > * { flex: none; }
+.main > div:has(> .log) > .log { flex: 1 1 0; min-height: 80px; height: auto; }
