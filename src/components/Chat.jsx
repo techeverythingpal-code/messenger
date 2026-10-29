@@ -122,7 +122,7 @@ export default function Chat({
   const onReact = useCallback((m, emo) => handleReactRef.current(m, emo), [])
 
   return (
-    <div>
+    <div className="chat">
       <ChatHeader
         contact={contact}
         status={status}
@@ -135,36 +135,40 @@ export default function Chat({
         onClose={onClose}
       />
 
-      <div className="log" ref={listRef}>
-        {visible.length === 0 && <p className="empty">No messages yet. Say hi!</p>}
-        {visible.map((m) => (
-          <MessageLine
-            key={m.id}
-            m={m}
-            myName={myName}
-            friendName={contact.username}
-            quoted={m.replyTo ? byMsgId.get(m.replyTo) : undefined}
-            reactions={reactionsOf.get(m.msgId)}
-            eye={eyeLabel(m)}
-            selected={selected === m.id}
-            onToggle={onToggle}
-            onReply={onReply}
-            onReact={onReact}
-          />
-        ))}
+      {/* One box: scrolling messages on top, message bar pinned to the bottom */}
+      <div className="chatbox">
+        <div className="log" ref={listRef}>
+          {visible.length === 0 && <p className="empty">No messages yet. Say hi!</p>}
+          {visible.map((m) => (
+            <MessageLine
+              key={m.id}
+              m={m}
+              myName={myName}
+              friendName={contact.username}
+              quoted={m.replyTo ? byMsgId.get(m.replyTo) : undefined}
+              reactions={reactionsOf.get(m.msgId)}
+              eye={eyeLabel(m)}
+              selected={selected === m.id}
+              onToggle={onToggle}
+              onReply={onReply}
+              onReact={onReact}
+            />
+          ))}
+        </div>
+
+        <div className="typing">{peerTyping ? `@${contact.username} is typing…` : ''}</div>
+
+        <Composer
+          replyTarget={replyTarget}
+          contactUsername={contact.username}
+          sending={sending}
+          onSend={handleSend}
+          onCancelReply={() => setReplyToId(null)}
+          onTyping={notifyTyping}
+          onBuzz={sendBuzz}
+        />
       </div>
 
-      <div className="typing">{peerTyping ? `@${contact.username} is typing…` : ''}</div>
-
-      <Composer
-        replyTarget={replyTarget}
-        contactUsername={contact.username}
-        sending={sending}
-        onSend={handleSend}
-        onCancelReply={() => setReplyToId(null)}
-        onTyping={notifyTyping}
-        onBuzz={sendBuzz}
-      />
       {error && <p className="msg">{error}</p>}
     </div>
   )

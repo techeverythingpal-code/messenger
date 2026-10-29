@@ -47,7 +47,7 @@ export default function Composer({
   }
 
   return (
-    <>
+    <div className="composer">
       {showPicker && (
         <div className="picker">
           {PICKER.map((emo) => (
@@ -57,11 +57,6 @@ export default function Composer({
           ))}
         </div>
       )}
-
-      <div className="toolbar">
-        <button type="button" onClick={() => setShowPicker((s) => !s)}>😊 Emoticons</button>
-        <button type="button" onClick={onBuzz} disabled={sending}>📳 Buzz!</button>
-      </div>
 
       {replyTarget && (
         <div className="replybar">
@@ -75,6 +70,25 @@ export default function Composer({
       )}
 
       <form className="row" onSubmit={handleSubmit}>
+        <button
+          type="button"
+          className="iconbtn"
+          title="Emoticons"
+          aria-label="Emoticons"
+          onClick={() => setShowPicker((s) => !s)}
+        >
+          😊
+        </button>
+        <button
+          type="button"
+          className="iconbtn"
+          title="Buzz!"
+          aria-label="Buzz"
+          onClick={onBuzz}
+          disabled={sending}
+        >
+          📳
+        </button>
         <input
           ref={inputRef}
           placeholder="Type a message"
@@ -86,8 +100,10 @@ export default function Composer({
           maxLength={limit}
           autoComplete="off"
         />
-        <button type="submit" disabled={sending}>Send</button>
+        <button type="submit" className="sendbtn" disabled={sending} aria-label="Send">
+          ➤
+        </button>
       </form>
-    </>
+    </div>
   )
 }

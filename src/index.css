@@ -209,7 +209,18 @@ body:has(.window.wide) { padding: 0; height: 100dvh; overflow: hidden; }
 .window.wide .footer { flex: none; padding: 4px 12px 8px; border-top: 1px solid var(--line); max-height: 50dvh; overflow-y: auto; }
 .window.wide .dangerzone { margin-top: 0; border-top: 0; padding-top: 0; }
 
-/* The open chat: the message log takes all the free height */
-.main > div:has(> .log) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.main > div:has(> .log) > * { flex: none; }
-.main > div:has(> .log) > .log { flex: 1 1 0; min-height: 80px; height: auto; }
+/* The open chat: header on top, then ONE box (WhatsApp style) holding the
+   scrolling messages with the message bar pinned to its bottom edge */
+.main > .chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.main > .chat > * { flex: none; }
+.chat > .chatbox { flex: 1 1 0; min-height: 120px; display: flex; flex-direction: column; margin: 8px 0; background: #fff; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.chatbox > * { flex: none; }
+.chatbox > .log { flex: 1 1 0; min-height: 0; height: auto; margin: 0; border: 0; border-radius: 0; }
+.chatbox > .typing { margin: 0; padding: 2px 10px 0; }
+.chatbox > .composer { padding: 6px 8px 8px; background: var(--purple-soft); border-top: 1px solid var(--line); }
+.composer .row { align-items: center; gap: 6px; }
+.composer .row input { background: #fff; border-radius: 20px; padding: 9px 14px; flex: 1; min-width: 0; }
+.composer button.iconbtn { flex: none; width: 36px; height: 36px; padding: 0; font-size: 18px; line-height: 1; border-radius: 50%; background: transparent; color: inherit; border: 0; }
+.composer button.iconbtn:hover:not(:disabled) { background: var(--line); }
+.composer button.sendbtn { flex: none; width: 38px; height: 38px; padding: 0; font-size: 16px; border-radius: 50%; }
+.composer .picker, .composer .replybar { margin-bottom: 6px; }
