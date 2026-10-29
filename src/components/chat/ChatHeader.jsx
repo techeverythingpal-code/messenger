@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import useCall from '../../hooks/useCall'
 
 const EXPIRY_OPTIONS = [
   { value: 'off', label: 'Off', seconds: null },
@@ -21,9 +22,21 @@ export default function ChatHeader({
   contact, status, contactDevices, notice, expireAfter,
   onDismissNotice, onExpiryChanged, onError, onClose,
 }) {
+  const { call, startCall } = useCall()
+
   const dot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
   const statusText =
     status === 'available' ? 'Online' : status === 'busy' ? 'Busy' : 'Offline'
+
+  // Calls only work while both people have the app open, so the button
+  // is enabled only while the contact is online and I'm not already in a call
+  const canCall = status === 'available' && call.status === 'idle'
+  const callHint =
+    call.status !== 'idle'
+      ? 'You are already in a call'
+      : status === 'available'
+        ? `Voice call @${contact.username}`
+        : `@${contact.username} must be online to receive a call`
 
   async function handleExpiry(e) {
     const opt = EXPIRY_OPTIONS.find((o) => o.value === e.target.value)
@@ -52,7 +65,16 @@ export default function ChatHeader({
           <span className={`dot ${dot}`} /> @{contact.username}
         </strong>
         <span className="muted">{statusText}</span>
-        <button className="small secondary" onClick={onClose}>← Back</button>
+        <button
+          className="small"
+          disabled={!canCall}
+          title={callHint}
+          aria-label={callHint}
+          onClick={() => startCall(contact.id, `@${contact.username}`)}
+        >
+          📞 Call
+        </button>
+        <button className="small secondary backbtn" onClick={onClose}>← Back</button>
       </div>
 
       <details className="fpbox">
