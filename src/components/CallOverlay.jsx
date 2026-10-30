@@ -4,6 +4,11 @@
 
 import { useEffect, useState } from 'react'
 import useCall from '../hooks/useCall'
+import {
+  canChooseOutput,
+  getOutputDeviceId,
+  setOutputDevice,
+} from '../lib/callManager'
 
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60)
@@ -11,9 +16,27 @@ function formatTime(totalSeconds) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+// The sound outputs (speakers, headsets...) this browser knows about
+async function listOutputs() {
+  const all = await navigator.mediaDevices.enumerateDevices()
+  return all
+    .filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'communications')
+    .map((d, i) => ({
+      id: d.deviceId,
+      label: d.label || (d.deviceId === 'default' ? 'Default' : `Speaker ${i + 1}`),
+    }))
+}
+
 export default function CallOverlay() {
   const { call, acceptCall, rejectCall, hangUp, toggleMute, clearNotice } = useCall()
   const [now, setNow] = useState(() => Date.now())
+
+  const [outputs, setOutputs] = useState([])
+  const [currentOutput, setCurrentOutput] = useState('default')
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [outputError, setOutputError] = useState('')
+
+  const inCall = call.status === 'connecting' || call.status === 'connected'
 
   // Tick every second while the call is connected (for the timer)
   useEffect(() => {
@@ -29,6 +52,48 @@ export default function CallOverlay() {
     const timer = setTimeout(clearNotice, 3500)
     return () => clearTimeout(timer)
   }, [call.notice, clearNotice])
+
+  // During a call: find the available sound outputs, and refresh the list
+  // when a headset is plugged in or removed
+  useEffect(() => {
+    if (!inCall || !canChooseOutput()) {
+      setOutputs([])
+      setPickerOpen(false)
+      setOutputError('')
+      return
+    }
+
+    let cancelled = false
+
+    async function refresh() {
+      try {
+        const list = await listOutputs()
+        if (cancelled) return
+        setOutputs(list)
+        setCurrentOutput(getOutputDeviceId())
+      } catch {
+        if (!cancelled) setOutputs([])
+      }
+    }
+
+    refresh()
+    navigator.mediaDevices.addEventListener('devicechange', refresh)
+    return () => {
+      cancelled = true
+      navigator.mediaDevices.removeEventListener('devicechange', refresh)
+    }
+  }, [inCall])
+
+  async function chooseOutput(id) {
+    setOutputError('')
+    try {
+      await setOutputDevice(id)
+      setCurrentOutput(getOutputDeviceId())
+      setPickerOpen(false)
+    } catch {
+      setOutputError('Could not switch to that output')
+    }
+  }
 
   // No call: only show the short message, if there is one
   if (call.status === 'idle') {
@@ -50,7 +115,8 @@ export default function CallOverlay() {
   else if (call.status === 'connecting') label = 'Connecting...'
   else label = formatTime(seconds)
 
-  const canMute = call.status === 'connecting' || call.status === 'connected'
+  const canMute = inCall
+  const canPickOutput = inCall && outputs.length > 1
 
   return (
     <div className="call-overlay" role="dialog" aria-modal="true" aria-label="Voice call">
@@ -83,6 +149,16 @@ export default function CallOverlay() {
                   <small>{call.muted ? 'Unmute' : 'Mute'}</small>
                 </button>
               )}
+              {canPickOutput && (
+                <button
+                  className={`callbtn sound ${pickerOpen ? 'on' : ''}`}
+                  onClick={() => setPickerOpen((open) => !open)}
+                  aria-expanded={pickerOpen}
+                >
+                  <span aria-hidden="true">🔊</span>
+                  <small>Sound</small>
+                </button>
+              )}
               <button className="callbtn decline" onClick={hangUp}>
                 <span aria-hidden="true">✖</span>
                 <small>Hang up</small>
@@ -90,6 +166,24 @@ export default function CallOverlay() {
             </>
           )}
         </div>
+
+        {pickerOpen && canPickOutput && (
+          <div className="call-outputs" role="menu" aria-label="Sound output">
+            {outputs.map((o) => (
+              <button
+                key={o.id}
+                role="menuitemradio"
+                aria-checked={o.id === currentOutput}
+                className={`outputbtn ${o.id === currentOutput ? 'on' : ''}`}
+                onClick={() => chooseOutput(o.id)}
+              >
+                <span>{o.label}</span>
+                {o.id === currentOutput && <span aria-hidden="true">✓</span>}
+              </button>
+            ))}
+            {outputError && <p className="call-error">{outputError}</p>}
+          </div>
+        )}
       </div>
     </div>
   )

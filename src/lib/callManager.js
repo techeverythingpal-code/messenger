@@ -10,6 +10,7 @@
 //   hangUp()
 //   toggleMute()
 //   clearNotice()
+//   canChooseOutput(), getOutputDeviceId(), setOutputDevice(deviceId)
 //   subscribe(listener), getState()   (used by the React hook)
 
 import { sendSignal, listenForSignals } from './callSignaling'
@@ -69,6 +70,37 @@ let disconnectTimer = null
 const remoteAudio = new Audio()
 remoteAudio.autoplay = true
 
+// ---------- choosing where the sound plays ----------
+
+// True if this browser can send call audio to a chosen speaker/headset.
+export function canChooseOutput() {
+  return (
+    typeof remoteAudio.setSinkId === 'function' &&
+    !!navigator.mediaDevices &&
+    typeof navigator.mediaDevices.enumerateDevices === 'function'
+  )
+}
+
+// The output device currently used ('default' if none was chosen).
+export function getOutputDeviceId() {
+  return remoteAudio.sinkId || 'default'
+}
+
+// Send the call sound to the given output device.
+export async function setOutputDevice(deviceId) {
+  if (!canChooseOutput()) {
+    throw new Error('This browser cannot change the sound output')
+  }
+  await remoteAudio.setSinkId(deviceId)
+}
+
+function resetOutputDevice() {
+  if (typeof remoteAudio.setSinkId !== 'function') return
+  if (remoteAudio.sinkId && remoteAudio.sinkId !== 'default') {
+    remoteAudio.setSinkId('').catch(() => {})
+  }
+}
+
 function send(peerId, callId, type, extra = {}) {
   if (!me) return
   sendSignal(peerId, { type, callId, from: me.id, ...extra }).catch(() => {})
@@ -92,6 +124,7 @@ function cleanup() {
   }
 
   remoteAudio.srcObject = null
+  resetOutputDevice()
   pendingOffer = null
   pendingCandidates = []
   outgoingCandidates = []
