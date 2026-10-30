@@ -188,7 +188,7 @@ button.rbtn.on { background: var(--purple-soft); border-color: var(--purple); }
   .split .main,
   .split:not(.open) .main { display: flex; flex: 1; }
 
-  .main .chat-head button { display: none; } /* "Back" is not needed: the list is beside the chat */
+  .main .chat-head button.backbtn { display: none; } /* "Back" is not needed: the list is beside the chat */
   .main > .empty { margin-top: 60px; }
 }
 
