@@ -1,48 +1,37 @@
 // api/turn.js
-// Vercel serverless function: creates short-lived Cloudflare TURN
-// credentials. The secret key stays on the server and never reaches
-// the browser.
+// Vercel serverless function: returns the ICE servers for calls.
+// The TURN username/password stay in Vercel env vars, not in the repo.
 
-export default async function handler(req, res) {
+export default function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
 
-  const keyId = process.env.TURN_KEY_ID
-  const token = process.env.TURN_KEY_API_TOKEN
+  const username = process.env.EXPRESSTURN_USERNAME
+  const credential = process.env.EXPRESSTURN_PASSWORD
 
-  if (!keyId || !token) {
+  if (!username || !credential) {
     return res.status(500).json({ error: 'TURN is not configured' })
   }
 
-  try {
-    const r = await fetch(
-      `https://rtc.live.cloudflare.com/v1/turn/keys/${keyId}/credentials/generate-ice-servers`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ttl: 86400 }),
-      }
-    )
+  const host = process.env.EXPRESSTURN_HOST || 'relay1.expressturn.com'
 
-    if (!r.ok) {
-      return res.status(502).json({ error: 'TURN provider error' })
-    }
+  const iceServers = [
+    {
+      urls: [
+        'stun:stun.l.google.com:19302',
+        'stun:stun.expressturn.com:3478',
+      ],
+    },
+    {
+      urls: [
+        `turn:${host}:3478?transport=udp`,
+        `turn:${host}:3478?transport=tcp`,
+        // TLS on 443: the path that survives strict firewalls
+        `turns:${host}:443?transport=tcp`,
+      ],
+      username,
+      credential,
+    },
+  ]
 
-    const data = await r.json()
-    const list = Array.isArray(data.iceServers)
-      ? data.iceServers
-      : [data.iceServers]
-
-    // Browsers block port 53, so drop those URLs to avoid connection timeouts
-    const iceServers = list.map((s) => ({
-      ...s,
-      urls: [].concat(s.urls).filter((u) => !/:53(\?|$)/.test(u)),
-    }))
-
-    return res.status(200).json({ iceServers })
-  } catch {
-    return res.status(502).json({ error: 'TURN request failed' })
-  }
+  return res.status(200).json({ iceServers })
 }
