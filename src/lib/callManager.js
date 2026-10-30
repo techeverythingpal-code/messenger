@@ -15,6 +15,7 @@
 
 import { sendSignal, listenForSignals } from './callSignaling'
 import { getIceServers } from './ice'
+import { startRingtone, stopRingtone } from './sounds'
 
 const RING_TIMEOUT_MS = 30000 // caller waits this long for an answer
 const INCOMING_TIMEOUT_MS = 45000 // incoming call stops ringing after this
@@ -36,8 +37,24 @@ const IDLE = {
 let state = IDLE
 const listeners = new Set()
 
+// Ring while calling (quieter) or incoming (full volume); silent otherwise.
+let ringing = null
+
+function syncRingtone() {
+  const want =
+    state.status === 'calling' || state.status === 'incoming'
+      ? state.status
+      : null
+  if (want === ringing) return
+  ringing = want
+  if (want === 'incoming') startRingtone(1)
+  else if (want === 'calling') startRingtone(0.4)
+  else stopRingtone()
+}
+
 function setState(patch) {
   state = { ...state, ...patch }
+  syncRingtone()
   listeners.forEach((l) => l())
 }
 
