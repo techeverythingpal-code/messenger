@@ -67,3 +67,31 @@ export function playBuzz() {
     /* sound is optional */
   }
 }
+
+// ---------- call ringtone (loops until stopRingtone) ----------
+
+let ringAudio = null
+
+export function startRingtone(volume = 1) {
+  try {
+    if (!ringAudio) {
+      ringAudio = new Audio('/sounds/google_ringtone.mp3')
+      ringAudio.loop = true
+    }
+    ringAudio.currentTime = 0
+    ringAudio.volume = volume
+    ringAudio.play().catch(() => {})
+  } catch {
+    /* sound is optional */
+  }
+}
+
+export function stopRingtone() {
+  if (!ringAudio) return
+  try {
+    ringAudio.pause()
+    ringAudio.currentTime = 0
+  } catch {
+    /* ignore */
+  }
+}
