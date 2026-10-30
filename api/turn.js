@@ -5,14 +5,23 @@
 export default function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
 
-  const username = process.env.EXPRESSTURN_USERNAME
-  const credential = process.env.EXPRESSTURN_PASSWORD
+   const username = (process.env.EXPRESSTURN_USERNAME || '').trim()
+  const credential = (process.env.EXPRESSTURN_PASSWORD || '').trim()
 
   if (!username || !credential) {
     return res.status(500).json({ error: 'TURN is not configured' })
   }
 
-  const host = process.env.EXPRESSTURN_HOST || 'relay1.expressturn.com'
+  // Keep only the bare hostname, even if the value was pasted with
+  // "turn:", "https://", a port like ":3478", or a path.
+  const host =
+    (process.env.EXPRESSTURN_HOST || 'relay1.expressturn.com')
+      .trim()
+      .replace(/^(turns?|stuns?):/i, '')
+      .replace(/^\/\//, '')
+      .replace(/^https?:\/\//i, '')
+      .split(/[/?]/)[0]
+      .replace(/:\d+$/, '') || 'relay1.expressturn.com'
 
   const iceServers = [
     {
