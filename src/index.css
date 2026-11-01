@@ -85,15 +85,32 @@ button.linklike:disabled { color: #999; }
 .chat-head strong { flex: 1; }
 .fpbox { font-size: 12px; color: #555; margin: 4px 0; }
 .fpbox summary { cursor: pointer; }
-.log { height: 300px; overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin: 8px 0; font-size: 13px; line-height: 1.45; word-break: break-word; white-space: pre-wrap; }
-.line { margin: 2px 0; cursor: pointer; }
-.line.system { color: #777; font-style: italic; cursor: default; }
-.line.selected { background: var(--purple-soft); border-radius: 4px; }
-.nick { font-weight: bold; }
-.nick.me { color: #c0392b; }
-.nick.them { color: #1f5fbf; }
-.log time { color: #999; font-size: 11px; margin-left: 6px; }
+.log { height: 300px; overflow-y: auto; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin: 8px 0; font-size: 15px; line-height: 1.45; word-break: break-word; white-space: pre-wrap; }
+.log > .empty { align-self: center; }
+/* Message bubbles: mine on the right (purple), theirs on the left (soft purple) */
+.line { position: relative; flex: none; max-width: 82%; margin: 3px 0; padding: 7px 12px; border-radius: 16px; overflow-wrap: anywhere; cursor: pointer; }
+.line.mine { align-self: flex-end; background: var(--purple); color: #fff; border-bottom-right-radius: 4px; }
+.line.theirs { align-self: flex-start; background: var(--purple-soft); color: #222; border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.line.selected { box-shadow: 0 0 0 2px #b9a0dc; }
+/* Buzz notices are not bubbles: a quiet centered note */
+.line.system { align-self: center; max-width: 100%; background: none; border: 0; padding: 2px 8px; color: #777; font-style: italic; text-align: center; cursor: default; }
+/* The name is not drawn (the side and color already say who wrote it) but screen readers still read it */
+.nick { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.log time { color: #999; font-size: 12px; margin-left: 8px; }
+.line.mine time { color: rgba(255, 255, 255, .75); }
+.line.system time { color: #999; }
 .bad { color: #888; }
+.line.mine .bad { color: #e3d6f3; }
+.line.mine .muted { color: rgba(255, 255, 255, .75); }
+.line.mine .tick { color: rgba(255, 255, 255, .75); }
+.line.mine .msg-link { color: #fff; }
+.line.mine .msg-link:hover { color: #e3d6f3; }
+.line.mine .reacts, .line.mine .msgbar { justify-content: flex-end; }
+.line.mine .eyes { color: #fff; }
+.line.mine .eyes span { color: rgba(255, 255, 255, .8); }
+.line.theirs .eyes { justify-content: flex-start; }
+.line.system .eyes { justify-content: center; color: #1f8fe5; }
+.line.system .eyes span { color: #777; }
 
 .toolbar { display: flex; gap: 6px; margin-bottom: 6px; }
 .toolbar button { width: auto; padding: 5px 10px; font-size: 13px; background: var(--purple-soft); color: var(--purple-dark); border: 1px solid var(--line); }
@@ -129,15 +146,18 @@ button.danger:hover:not(:disabled) { background: #8e0000; }
 .tag-this { background: #e8f5e9; color: #2e7d32; border-radius: 10px; font-size: 11px; padding: 1px 8px; }
 .forgot { font-size: 13px; text-align: right; margin: -4px 0 12px; }
 .typing { font-size: 12px; color: #777; font-style: italic; min-height: 16px; margin: -2px 0 6px; }
-.tick { margin-left: 6px; font-size: 11px; color: #999; }
+.tick { margin-left: 6px; font-size: 12px; color: #999; }
 .eyes { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 1px; font-size: 12px; font-style: normal; white-space: normal; color: #1f8fe5; }
-.eyes span { font-size: 11px; color: #777; }
+.eyes span { font-size: 12px; color: #777; }
 
 /* ---- Replies and reactions ---- */
-.quote { border-left: 3px solid var(--purple); background: #f6f2fb; color: #666; font-size: 12px; font-style: normal; padding: 2px 6px; margin: 2px 0 3px; border-radius: 3px; white-space: normal; overflow: hidden; text-overflow: ellipsis; }
+.quote { border-left: 3px solid var(--purple); background: #f6f2fb; color: #666; font-size: 13px; font-style: normal; padding: 2px 6px; margin: 0 0 5px; border-radius: 3px; white-space: normal; overflow: hidden; text-overflow: ellipsis; }
 .quote em { color: #888; }
+.line.theirs .quote { background: #fff; }
+.line.mine .quote { background: rgba(255, 255, 255, .18); color: #f1e9fb; border-left-color: rgba(255, 255, 255, .8); }
+.line.mine .quote em { color: #e3d6f3; }
 .reacts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; white-space: normal; font-style: normal; }
-.react { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; font-size: 12px; line-height: 1.6; }
+.react { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; font-size: 13px; line-height: 1.6; }
 .react.mine { background: var(--purple-soft); border-color: var(--purple); }
 .msgbar { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; white-space: normal; font-style: normal; }
 button.rbtn { width: auto; padding: 3px 8px; font-size: 14px; line-height: 1.3; background: #fff; color: var(--purple-dark); border: 1px solid var(--line); border-radius: 12px; }

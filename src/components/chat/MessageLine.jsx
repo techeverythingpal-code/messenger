@@ -29,9 +29,12 @@ function Eyes({ label }) {
 function MessageLine({
   m, myName, friendName, quoted, reactions, eye, selected, onToggle, onReply, onReact, onEdit,
 }) {
+  // "mine" bubbles are drawn on the right, "theirs" on the left (see index.css)
+  const side = m.mine ? 'mine' : 'theirs'
+
   if (m.buzz) {
     return (
-      <div className="line system">
+      <div className={`line system ${side}`}>
         📳zzz {m.mine ? 'You buzzed' : `@${friendName} buzzed you`}!
         <time>{fmt(m.time)}</time>
         <Eyes label={eye} />
@@ -42,7 +45,10 @@ function MessageLine({
   const chips = reactChips(reactions, friendName)
 
   return (
-    <div className={`line ${selected ? 'selected' : ''}`} onClick={() => onToggle(m.id)}>
+    <div
+      className={`line ${side} ${selected ? 'selected' : ''}`}
+      onClick={() => onToggle(m.id)}
+    >
       {m.replyTo && (
         <div className="quote">
           {quoted ? (
@@ -55,9 +61,10 @@ function MessageLine({
           )}
         </div>
       )}
+      {/* The name is hidden by the CSS: the side and color already show who wrote it */}
       <span className={`nick ${m.mine ? 'me' : 'them'}`}>
         {m.mine ? myName : friendName}:
-      </span>{' '}
+      </span>
       {m.text === null ? (
         <em className="bad">🔒 Can't decrypt this message</em>
       ) : (
