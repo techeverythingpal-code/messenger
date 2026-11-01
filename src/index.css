@@ -16,6 +16,8 @@ body {
   color: #222;
   font-family: "Aref Ruqaa", serif;
   font-size: 14px;
+  font-weight: 400;
+  font-style: normal;
 }
 #root { width: 100%; max-width: 440px; }
 
