@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MAX_MESSAGE_CHARS } from '../../crypto/encrypt'
 import { PICKER } from '../../lib/emoticons'
 import { REPLY_OVERHEAD, stripControls, snippetOf } from './protocol'
@@ -22,6 +22,15 @@ export default function Composer({
     if (replyId) inputRef.current?.focus()
   }, [replyId])
 
+  // Grow (or shrink) the box to fit the text. CSS max-height stops the growth
+  // and the box scrolls after that.
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`
+  }, [text])
+
   const limit = replyTarget ? MAX_MESSAGE_CHARS - REPLY_OVERHEAD : MAX_MESSAGE_CHARS
 
   function handleSubmit(e) {
@@ -29,6 +38,15 @@ export default function Composer({
     const t = stripControls(text).trim()
     if (!t || sending) return
     onSend(t, () => setText('')) // parent calls this only after a successful send
+  }
+
+  // Desktop: Enter sends, Shift+Enter = new line.
+  // Touch screens: Enter = new line (use the send button).
+  function handleKeyDown(e) {
+    if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return
+    if (!window.matchMedia('(pointer: fine)').matches) return
+    e.preventDefault()
+    e.currentTarget.form?.requestSubmit()
   }
 
   function insertEmoji(emoji) {
@@ -89,14 +107,16 @@ export default function Composer({
         >
           📳
         </button>
-        <input
+        <textarea
           ref={inputRef}
+          rows={1}
           placeholder="Type a message"
           value={text}
           onChange={(e) => {
             setText(e.target.value)
             if (e.target.value) onTyping()
           }}
+          onKeyDown={handleKeyDown}
           maxLength={limit}
           autoComplete="off"
         />
