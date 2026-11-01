@@ -14,10 +14,9 @@ body {
   justify-content: center;
   background: #e9e4f2;
   color: #222;
-  font-family: "Aref Ruqaa", serif;
+  font-family: "Marhey", sans-serif;
   font-size: 14px;
-  font-weight: 400;
-  font-style: normal;
+  
 }
 #root { width: 100%; max-width: 440px; }
 
