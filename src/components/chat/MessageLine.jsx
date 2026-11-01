@@ -54,25 +54,36 @@ function MessageLine({
           {quoted ? (
             <>
               ↩ <strong>{quoted.mine ? 'You' : `@${friendName}`}</strong>{' '}
-              {snippetOf(quoted)}
+              <bdi>{snippetOf(quoted)}</bdi>
             </>
           ) : (
             <em>↩ Original message unavailable</em>
           )}
         </div>
       )}
-      {/* The name is hidden by the CSS: the side and color already show who wrote it */}
+      {/* The name is hidden by the CSS: the side and color already show who wrote it.
+          It stays OUTSIDE the dir="auto" block below, so it can't change the direction. */}
       <span className={`nick ${m.mine ? 'me' : 'them'}`}>
         {m.mine ? myName : friendName}:
       </span>
-      {m.text === null ? (
-        <em className="bad">🔒 Can't decrypt this message</em>
-      ) : (
-        <Linkified text={stripControls(m.text)} />
-      )}
-      {m.edited && <span className="muted"> (edited)</span>}
-      <time>{fmt(m.time)}</time>
-      {m.mine && <span className="tick" title="Sent">✓</span>}
+      {/* dir="auto": the first letter decides the direction. Arabic reads right to left
+          and sits on the right, English left to right, and a line that mixes both
+          follows the standard bidirectional rules. */}
+      <div dir="auto">
+        {m.text === null ? (
+          <em className="bad">🔒 Can't decrypt this message</em>
+        ) : (
+          <Linkified text={stripControls(m.text)} />
+        )}
+        {m.edited && <span className="muted"> (edited)</span>}{' '}
+        <time>{fmt(m.time)}</time>
+        {m.mine && (
+          <>
+            {' '}
+            <span className="tick" title="Sent">✓</span>
+          </>
+        )}
+      </div>
       {chips.length > 0 && (
         <div className="reacts">
           {chips.map((c) => (

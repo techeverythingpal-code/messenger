@@ -114,7 +114,7 @@ export default function Composer({
 
       {editTarget ? (
         <div className="replybar">
-          <span>✏️ Editing message: {snippetOf(editTarget)}</span>
+          <span>✏️ Editing message: <bdi>{snippetOf(editTarget)}</bdi></span>
           <button type="button" className="rbtn" title="Cancel (Esc)" onClick={cancelEdit}>
             ✕
           </button>
@@ -125,7 +125,7 @@ export default function Composer({
             <span>
               ↩ Replying to{' '}
               <strong>{replyTarget.mine ? 'yourself' : `@${contactUsername}`}</strong>:{' '}
-              {snippetOf(replyTarget)}
+              <bdi>{snippetOf(replyTarget)}</bdi>
             </span>
             <button type="button" className="rbtn" onClick={onCancelReply}>✕</button>
           </div>
@@ -152,8 +152,11 @@ export default function Composer({
         >
           📳
         </button>
+        {/* dir="auto": the box follows the first letter you type. Arabic flips it to
+            right to left, English keeps it left to right. */}
         <textarea
           ref={inputRef}
+          dir="auto"
           rows={1}
           placeholder={editTarget ? 'Edit your message' : 'Type a message'}
           value={text}
