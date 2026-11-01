@@ -1,20 +1,22 @@
 import { useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { buildCopies } from '../../crypto/encrypt'
+import { uploadVoice, removeVoice } from '../../crypto/voice'
 import { playBuzz } from '../../lib/sounds'
 import { vibrateBuzz } from '../../lib/haptics'
-import { BUZZ_TOKEN, buildReaction, buildEdit } from './protocol'
+import { BUZZ_TOKEN, buildReaction, buildEdit, buildVoice } from './protocol'
 import { toView } from './messageView'
 
 const BUZZ_COOLDOWN_MS = 10000
 
-// Everything about SENDING in one chat: text, buzzes, reactions and edits.
+// Everything about SENDING in one chat: text, buzzes, reactions, edits and voice notes.
 //
 //   sending                      → true while something is on its way (disable buttons)
 //   sendMessage(plain, onSent)   → send text; onSent() runs only if it worked
 //   sendBuzz()                   → send a buzz (with a 10 second cooldown)
 //   sendReaction(msgId, emoji)   → react to a message ('' removes my reaction)
 //   sendEdit(msgId, newText, onSent) → change one of my earlier messages
+//   sendVoice({ blob, seconds, mime, replyTo }, onSent) → send a voice note
 //
 // Failures are shown through setError, so Chat can display them.
 export function useSendMessage({
@@ -55,7 +57,10 @@ export function useSendMessage({
       .eq('msg_id', msgId)
       .eq('target_device', deviceId)
       .single()
-    if (e2) throw e2
+    if (e2) {
+      e2.afterInsert = true // the message WAS sent, only showing it failed
+      throw e2
+    }
 
     const view = await toView(data, myId, myPrivateKey, dir)
     addMessages([view])
@@ -110,5 +115,20 @@ export function useSendMessage({
     })
   }
 
-  return { sending, sendMessage, sendBuzz, sendReaction, sendEdit }
+  // A voice note: encrypt + upload the audio, then send the small message with its key
+  function sendVoice({ blob, seconds, mime, replyTo }, onSent) {
+    return run(async () => {
+      const up = await uploadVoice({ blob, myId, friendId: contact.id })
+      try {
+        await sendText(buildVoice({ ...up, seconds, mime, replyTo }))
+      } catch (err) {
+        // Not stored at all: the uploaded file is useless, so remove it
+        if (!err.afterInsert) await removeVoice(up.path)
+        throw err
+      }
+      onSent?.()
+    })
+  }
+
+  return { sending, sendMessage, sendBuzz, sendReaction, sendEdit, sendVoice }
 }

@@ -130,7 +130,7 @@ export function useChatSync({
             vibrateBuzz()
             onBuzzRef.current()
           }
-        } else if (view.text !== null) {
+        } else if (view.text !== null || view.voice) {
           playMessage()
           vibrateMessage()
         }

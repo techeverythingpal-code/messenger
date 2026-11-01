@@ -1,10 +1,11 @@
 // Turning database rows into messages the screen can show.
 //
 // A "view" is what Chat renders:
-//   { id, msgId, mine, text, buzz, replyTo, react, edit, time }
+//   { id, msgId, mine, text, buzz, voice, replyTo, react, edit, time }
 //   - react is { target, emoji } for a reaction, otherwise null
 //   - edit is { target, newText } for an edit of an earlier message, otherwise null
-//   - text is null when the message couldn't be decrypted
+//   - voice is { path, key, iv, seconds, mime } for a voice note, otherwise null
+//   - text is null when the message couldn't be decrypted (or is not text)
 
 import { decryptMessage } from '../../crypto/encrypt'
 import { parsePlain } from './protocol'
@@ -31,6 +32,7 @@ export async function toView(row, myId, myPrivateKey, dir) {
     mine: row.sender_id === myId,
     text: p.text,
     buzz: p.type === 'buzz',
+    voice: p.type === 'voice' ? p.voice : null,
     replyTo: p.replyTo ?? null,
     react: p.type === 'react' ? { target: p.target, emoji: p.emoji } : null,
     edit: p.type === 'edit' ? { target: p.target, newText: p.newText } : null,

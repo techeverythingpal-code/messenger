@@ -6,6 +6,8 @@
 //   reply:    \u0000REPLY<msg_id>\u0000<text>
 //   reaction: \u0000REACT<msg_id>\u0000<emoji>   (empty emoji = remove my reaction)
 //   edit:     \u0000EDIT<msg_id>\u0000<new text>  (changes one of MY earlier messages)
+//   voice:    \u0000VOICE{"p":path,"k":key,"i":iv,"d":seconds,"t":mime,"r":reply msg_id}
+//             (the audio itself is an encrypted file in storage; this holds its key)
 //
 // People can't type control characters (see stripControls), so these can't be faked.
 
@@ -13,6 +15,7 @@ export const BUZZ_TOKEN = '\u0000BUZZ'
 export const REPLY_PREFIX = '\u0000REPLY'
 export const REACT_PREFIX = '\u0000REACT'
 export const EDIT_PREFIX = '\u0000EDIT'
+export const VOICE_PREFIX = '\u0000VOICE'
 export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
 // A reply wraps the text with: prefix + 36-char msg_id + one separator
@@ -22,6 +25,9 @@ export const REPLY_OVERHEAD = REPLY_PREFIX.length + 36 + 1
 export const EDIT_OVERHEAD = EDIT_PREFIX.length + 36 + 1
 
 const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
+const KEY_RE = /^[A-Za-z0-9+/]{43}=$/ // 32 bytes in base64
+const IV_RE = /^[A-Za-z0-9+/]{16}$/ // 12 bytes in base64
+const VOICE_MIME_RE = /^audio\/(webm|ogg|mp4|mpeg|aac|x-m4a)$/
 
 // Remove control characters so nobody can fake a buzz by typing or pasting it
 export function stripControls(s) {
@@ -47,12 +53,48 @@ export function buildEdit(targetMsgId, newText) {
   return `${EDIT_PREFIX}${targetMsgId}\u0000${newText}`
 }
 
+// path/key/iv come from uploadVoice(); seconds is the length; mime is e.g. 'audio/webm'
+export function buildVoice({ path, key, iv, seconds, mime, replyTo }) {
+  const body = { p: path, k: key, i: iv, d: Math.round(seconds), t: mime }
+  if (replyTo) body.r = replyTo
+  return `${VOICE_PREFIX}${JSON.stringify(body)}`
+}
+
 // ---- Parsing (what we received) ----
 
-// Turn decrypted text into what it really is: text, buzz, reply, reaction or edit
+// A voice message is only accepted if every field has exactly the expected shape
+function parseVoice(text) {
+  try {
+    const b = JSON.parse(text.slice(VOICE_PREFIX.length))
+    const parts = typeof b.p === 'string' ? b.p.split('/') : []
+    const okPath = parts.length === 3 && parts.every((x) => UUID_RE.test(x))
+    const okReply = b.r === undefined || (typeof b.r === 'string' && UUID_RE.test(b.r))
+    if (
+      okPath &&
+      okReply &&
+      typeof b.k === 'string' && KEY_RE.test(b.k) &&
+      typeof b.i === 'string' && IV_RE.test(b.i) &&
+      typeof b.t === 'string' && VOICE_MIME_RE.test(b.t) &&
+      Number.isFinite(b.d) && b.d >= 0 && b.d <= 3600
+    ) {
+      return {
+        type: 'voice',
+        text: null,
+        replyTo: b.r ?? null,
+        voice: { path: b.p, key: b.k, iv: b.i, seconds: b.d, mime: b.t },
+      }
+    }
+  } catch {
+    /* falls through to "bad" */
+  }
+  return { type: 'bad', text: null }
+}
+
+// Turn decrypted text into what it really is: text, buzz, reply, reaction, edit or voice
 export function parsePlain(text) {
   if (text === null) return { type: 'bad', text: null }
   if (text === BUZZ_TOKEN) return { type: 'buzz', text }
+  if (text.startsWith(VOICE_PREFIX)) return parseVoice(text)
   const isReply = text.startsWith(REPLY_PREFIX)
   const isReact = text.startsWith(REACT_PREFIX)
   const isEdit = text.startsWith(EDIT_PREFIX)
@@ -80,6 +122,7 @@ export function parsePlain(text) {
 // A short one-line preview of a message, for reply quotes
 export function snippetOf(m) {
   if (m.buzz) return '📳 Buzz'
+  if (m.voice) return '🎤 Voice message'
   if (m.text === null) return "🔒 Can't decrypt"
   const t = stripControls(m.text).replace(/\s+/g, ' ').trim()
   return t.length > 80 ? `${t.slice(0, 80)}…` : t
