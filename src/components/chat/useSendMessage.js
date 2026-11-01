@@ -3,17 +3,18 @@ import { supabase } from '../../lib/supabase'
 import { buildCopies } from '../../crypto/encrypt'
 import { playBuzz } from '../../lib/sounds'
 import { vibrateBuzz } from '../../lib/haptics'
-import { BUZZ_TOKEN, buildReaction } from './protocol'
+import { BUZZ_TOKEN, buildReaction, buildEdit } from './protocol'
 import { toView } from './messageView'
 
 const BUZZ_COOLDOWN_MS = 10000
 
-// Everything about SENDING in one chat: text, buzzes and reactions.
+// Everything about SENDING in one chat: text, buzzes, reactions and edits.
 //
 //   sending                      → true while something is on its way (disable buttons)
 //   sendMessage(plain, onSent)   → send text; onSent() runs only if it worked
 //   sendBuzz()                   → send a buzz (with a 10 second cooldown)
 //   sendReaction(msgId, emoji)   → react to a message ('' removes my reaction)
+//   sendEdit(msgId, newText, onSent) → change one of my earlier messages
 //
 // Failures are shown through setError, so Chat can display them.
 export function useSendMessage({
@@ -101,5 +102,13 @@ export function useSendMessage({
     return run(() => sendText(buildReaction(targetMsgId, emoji), 'react'))
   }
 
-  return { sending, sendMessage, sendBuzz, sendReaction }
+  // Edits are stored like reactions: a hidden message of kind 'edit'
+  function sendEdit(targetMsgId, newText, onSent) {
+    return run(async () => {
+      await sendText(buildEdit(targetMsgId, newText), 'edit')
+      onSent?.()
+    })
+  }
+
+  return { sending, sendMessage, sendBuzz, sendReaction, sendEdit }
 }

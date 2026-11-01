@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createDirectory } from '../lib/deviceDirectory'
 import { MAX_MESSAGE_CHARS } from '../crypto/encrypt'
 import { useTyping } from '../lib/useTyping'
-import { REPLY_OVERHEAD, buildReply } from './chat/protocol'
+import { EDIT_OVERHEAD, REPLY_OVERHEAD, buildReply } from './chat/protocol'
 import { useChatSync } from './chat/useChatSync'
 import { useMarkSeen } from './chat/useMarkSeen'
 import { useSendMessage } from './chat/useSendMessage'
-import { visibleMessages, reactionsByMessage, lastReadId } from './chat/derive'
+import { visibleMessages, applyEdits, reactionsByMessage, lastReadId } from './chat/derive'
 import MessageLine from './chat/MessageLine'
 import ChatHeader from './chat/ChatHeader'
 import Composer from './chat/Composer'
@@ -20,6 +20,7 @@ export default function Chat({
 
   const [selected, setSelected] = useState(null) // the message whose Reply / React bar is open
   const [replyToId, setReplyToId] = useState(null) // msg_id of the message I'm replying to
+  const [editToId, setEditToId] = useState(null) // msg_id of my message I'm editing
 
   const listRef = useRef(null)
 
@@ -48,14 +49,17 @@ export default function Chat({
     return () => clearInterval(t)
   }, [])
 
-  // Reactions are not lines of their own, so they are left out of the list.
+  // Edited messages get their newest text; reactions and edits are not lines
+  // of their own, so they are left out of the list.
   // Memoised so the same message objects are reused until something really changes.
+  const edited = useMemo(() => applyEdits(messages), [messages])
   const visible = useMemo(
-    () => visibleMessages(messages, now, expireAfter),
-    [messages, now, expireAfter]
+    () => visibleMessages(edited, now, expireAfter),
+    [edited, now, expireAfter]
   )
   const byMsgId = useMemo(() => new Map(visible.map((m) => [m.msgId, m])), [visible])
   const replyTarget = replyToId ? byMsgId.get(replyToId) : null
+  const editTarget = editToId ? byMsgId.get(editToId) : null
 
   // Latest reaction of each person on each message: msg_id -> { me, them }
   const reactionsOf = useMemo(() => reactionsByMessage(messages), [messages])
@@ -78,12 +82,33 @@ export default function Chat({
   // receipts, while the window is actually focused)
   useMarkSeen({ messages, shareSeen, contactId: contact.id, onSeen, bumpMyReadUntil })
 
-  const { sending, sendMessage, sendBuzz, sendReaction } = useSendMessage({
+  const { sending, sendMessage, sendBuzz, sendReaction, sendEdit } = useSendMessage({
     myId, deviceId, myPrivateKey, contact, dir, addMessages, setError, onBuzzRef,
   })
 
   // Composer hands me the cleaned text; I only clear its box after a successful send
   async function handleSend(t, onSent) {
+    // Editing one of my messages: send the new text as an edit
+    if (editTarget) {
+      if (!editTarget.mine) return
+      if (t.length > MAX_MESSAGE_CHARS - EDIT_OVERHEAD) {
+        setError(`An edited message can be at most ${MAX_MESSAGE_CHARS - EDIT_OVERHEAD} characters.`)
+        return
+      }
+      if (t === editTarget.text) {
+        // Nothing changed, so there is nothing to send
+        onSent()
+        setEditToId(null)
+        return
+      }
+      await sendEdit(editTarget.msgId, t, () => {
+        onSent()
+        setEditToId(null)
+        stopTyping()
+      })
+      return
+    }
+
     let plain = t
     if (replyTarget) {
       if (t.length > MAX_MESSAGE_CHARS - REPLY_OVERHEAD) {
@@ -117,6 +142,12 @@ export default function Chat({
   const onToggle = useCallback((id) => setSelected((s) => (s === id ? null : id)), [])
   const onReply = useCallback((m) => {
     setReplyToId(m.msgId)
+    setEditToId(null) // a reply and an edit can't happen at the same time
+    setSelected(null)
+  }, [])
+  const onEdit = useCallback((m) => {
+    setEditToId(m.msgId)
+    setReplyToId(null)
     setSelected(null)
   }, [])
   const onReact = useCallback((m, emo) => handleReactRef.current(m, emo), [])
@@ -152,6 +183,7 @@ export default function Chat({
               onToggle={onToggle}
               onReply={onReply}
               onReact={onReact}
+              onEdit={onEdit}
             />
           ))}
         </div>
@@ -160,10 +192,12 @@ export default function Chat({
 
         <Composer
           replyTarget={replyTarget}
+          editTarget={editTarget}
           contactUsername={contact.username}
           sending={sending}
           onSend={handleSend}
           onCancelReply={() => setReplyToId(null)}
+          onCancelEdit={() => setEditToId(null)}
           onTyping={notifyTyping}
           onBuzz={sendBuzz}
         />

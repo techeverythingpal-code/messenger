@@ -1,14 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MAX_MESSAGE_CHARS } from '../../crypto/encrypt'
 import { PICKER } from '../../lib/emoticons'
-import { REPLY_OVERHEAD, stripControls, snippetOf } from './protocol'
+import { EDIT_OVERHEAD, REPLY_OVERHEAD, stripControls, snippetOf } from './protocol'
 
 export default function Composer({
   replyTarget,
+  editTarget,    // the message I'm editing (null when not editing)
   contactUsername,
   sending,
   onSend,        // (text, onSent) => Promise
   onCancelReply,
+  onCancelEdit,
   onTyping,      // notifyTyping from useTyping
   onBuzz,
 }) {
@@ -22,6 +24,25 @@ export default function Composer({
     if (replyId) inputRef.current?.focus()
   }, [replyId])
 
+  // Keep the newest text of the message being edited (declared before the
+  // effect below, so it is already up to date when that effect runs)
+  const editTextRef = useRef('')
+  useEffect(() => {
+    editTextRef.current = editTarget?.text ?? ''
+  })
+
+  // When an edit starts: put the message's text in the box, cursor at the end
+  const editId = editTarget?.msgId
+  useEffect(() => {
+    if (!editId) return
+    setText(editTextRef.current)
+    const el = inputRef.current
+    el?.focus()
+    requestAnimationFrame(() => {
+      if (el) el.setSelectionRange(el.value.length, el.value.length)
+    })
+  }, [editId])
+
   // Grow (or shrink) the box to fit the text. CSS max-height stops the growth
   // and the box scrolls after that.
   useLayoutEffect(() => {
@@ -31,7 +52,11 @@ export default function Composer({
     el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`
   }, [text])
 
-  const limit = replyTarget ? MAX_MESSAGE_CHARS - REPLY_OVERHEAD : MAX_MESSAGE_CHARS
+  const limit = editTarget
+    ? MAX_MESSAGE_CHARS - EDIT_OVERHEAD
+    : replyTarget
+      ? MAX_MESSAGE_CHARS - REPLY_OVERHEAD
+      : MAX_MESSAGE_CHARS
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -40,9 +65,20 @@ export default function Composer({
     onSend(t, () => setText('')) // parent calls this only after a successful send
   }
 
+  function cancelEdit() {
+    setText('')
+    onCancelEdit()
+  }
+
   // Desktop: Enter sends, Shift+Enter = new line.
   // Touch screens: Enter = new line (use the send button).
+  // Esc cancels an edit.
   function handleKeyDown(e) {
+    if (e.key === 'Escape' && editTarget) {
+      e.preventDefault()
+      cancelEdit()
+      return
+    }
     if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return
     if (!window.matchMedia('(pointer: fine)').matches) return
     e.preventDefault()
@@ -54,7 +90,7 @@ export default function Composer({
     const start = el?.selectionStart ?? text.length
     const end = el?.selectionEnd ?? start
     const next = text.slice(0, start) + emoji + text.slice(end)
-    if (next.length > MAX_MESSAGE_CHARS) return
+    if (next.length > limit) return
     setText(next)
     setShowPicker(false)
     requestAnimationFrame(() => {
@@ -76,15 +112,24 @@ export default function Composer({
         </div>
       )}
 
-      {replyTarget && (
+      {editTarget ? (
         <div className="replybar">
-          <span>
-            ↩ Replying to{' '}
-            <strong>{replyTarget.mine ? 'yourself' : `@${contactUsername}`}</strong>:{' '}
-            {snippetOf(replyTarget)}
-          </span>
-          <button type="button" className="rbtn" onClick={onCancelReply}>✕</button>
+          <span>✏️ Editing message: {snippetOf(editTarget)}</span>
+          <button type="button" className="rbtn" title="Cancel (Esc)" onClick={cancelEdit}>
+            ✕
+          </button>
         </div>
+      ) : (
+        replyTarget && (
+          <div className="replybar">
+            <span>
+              ↩ Replying to{' '}
+              <strong>{replyTarget.mine ? 'yourself' : `@${contactUsername}`}</strong>:{' '}
+              {snippetOf(replyTarget)}
+            </span>
+            <button type="button" className="rbtn" onClick={onCancelReply}>✕</button>
+          </div>
+        )
       )}
 
       <form className="row" onSubmit={handleSubmit}>
@@ -110,18 +155,23 @@ export default function Composer({
         <textarea
           ref={inputRef}
           rows={1}
-          placeholder="Type a message"
+          placeholder={editTarget ? 'Edit your message' : 'Type a message'}
           value={text}
           onChange={(e) => {
             setText(e.target.value)
-            if (e.target.value) onTyping()
+            if (e.target.value && !editTarget) onTyping()
           }}
           onKeyDown={handleKeyDown}
           maxLength={limit}
           autoComplete="off"
         />
-        <button type="submit" className="sendbtn" disabled={sending} aria-label="Send">
-          ➤
+        <button
+          type="submit"
+          className="sendbtn"
+          disabled={sending}
+          aria-label={editTarget ? 'Save edit' : 'Send'}
+        >
+          {editTarget ? '✓' : '➤'}
         </button>
       </form>
     </div>

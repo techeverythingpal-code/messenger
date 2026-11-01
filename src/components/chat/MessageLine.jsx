@@ -19,15 +19,15 @@ function Eyes({ label }) {
 // One line in the chat log: a buzz notice or a message bubble.
 //
 // Props:
-//   m          the message view (see messageView.js)
+//   m          the message view (see messageView.js); m.edited is true after an edit
 //   myName, friendName
 //   quoted     the message this one replies to (undefined if it isn't available)
 //   reactions  { me, them } emoji for this message, or undefined
 //   eye        who has "seen up to here": a name, 'You', or null
 //   selected   whether the Reply / React bar is open on this message
-//   onToggle(id), onReply(m), onReact(m, emoji)  -- must be stable (useCallback)
+//   onToggle(id), onReply(m), onReact(m, emoji), onEdit(m)  -- must be stable (useCallback)
 function MessageLine({
-  m, myName, friendName, quoted, reactions, eye, selected, onToggle, onReply, onReact,
+  m, myName, friendName, quoted, reactions, eye, selected, onToggle, onReply, onReact, onEdit,
 }) {
   if (m.buzz) {
     return (
@@ -63,6 +63,7 @@ function MessageLine({
       ) : (
         <Linkified text={stripControls(m.text)} />
       )}
+      {m.edited && <span className="muted"> (edited)</span>}
       <time>{fmt(m.time)}</time>
       {m.mine && <span className="tick" title="Sent">✓</span>}
       {chips.length > 0 && (
@@ -84,6 +85,11 @@ function MessageLine({
           <button type="button" className="rbtn" onClick={() => onReply(m)}>
             ↩ Reply
           </button>
+          {m.mine && (
+            <button type="button" className="rbtn" onClick={() => onEdit(m)}>
+              ✏️ Edit
+            </button>
+          )}
           {REACTIONS.map((emo) => (
             <button
               key={emo}
