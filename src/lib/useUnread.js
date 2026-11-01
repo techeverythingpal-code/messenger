@@ -44,7 +44,7 @@ export function useUnread({ userId, deviceId, ready, openContactId, friends }) {
       .select('id, sender_id')
       .eq('target_device', deviceId)
       .neq('sender_id', userId)
-      .eq('kind', 'msg') // reactions are not unread messages
+      .eq('kind', 'msg') // reactions and edits are not unread messages
       .order('id', { ascending: false })
       .limit(500)
       .then(({ data }) => {
@@ -82,7 +82,8 @@ export function useUnread({ userId, deviceId, ready, openContactId, friends }) {
         (payload) => {
           const sender = payload.new.sender_id
           if (sender === userId) return // sent from another device of mine
-          if (payload.new.kind === 'react') return // reactions are not new messages
+          // reactions and edits are not new messages
+          if (payload.new.kind === 'react' || payload.new.kind === 'edit') return
 
           const chatOpen = openRef.current === sender
           // An open chat only counts as read while you can actually see this tab

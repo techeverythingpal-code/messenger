@@ -117,7 +117,8 @@ export function useChatSync({
         if (cancelled) return
         setMessages((prev) => mergeInto(prev, [view]))
         if (view.mine) return // sent from another device of mine
-        if (view.react) return // a reaction: no sound, it just appears on the message
+        // A reaction or an edit: no sound, it just appears on the message
+        if (view.react || view.edit) return
 
         clearTyping() // a message arrived, so they're done typing
 

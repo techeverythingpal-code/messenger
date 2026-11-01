@@ -37,8 +37,9 @@ Deno.serve(async (req) => {
   // Every message is stored once per device. Skip the copies for my own devices.
   if (row.sender_id === row.target_user) return new Response('own copy')
 
-  // Reactions don't need a notification
+  // Reactions and edits don't need a notification
   if (row.kind === 'react') return new Response('reaction')
+  if (row.kind === 'edit') return new Response('edit')
 
   const { data: sub } = await supabase
     .from('push_subscriptions')
