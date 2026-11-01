@@ -1,9 +1,9 @@
 :root {
-  --purple: #606fc5;
+  --purple: #9e58df;
   --purple-dark: #4a1d73;
   --purple-soft: #f3effa;
   --line: #ddd5ea;
-  --navey-blue: #2c3e50;
+  
 }
 
 * { box-sizing: border-box; }
@@ -93,7 +93,7 @@ button.linklike:disabled { color: #999; }
 .log > .empty { align-self: center; }
 /* Message bubbles: mine on the right (purple), theirs on the left (soft purple) */
 .line { position: relative; flex: none; max-width: 82%; margin: 3px 0; padding: 7px 12px; border-radius: 16px; overflow-wrap: anywhere; cursor: pointer; }
-.line.mine { align-self: flex-end; background: var(--navey-blue); color: #fff; border-bottom-right-radius: 4px; }
+.line.mine { align-self: flex-end; background: var(--purple); color: #fff; border-bottom-right-radius: 4px; }
 .line.theirs { align-self: flex-start; background: var(--purple-soft); color: #222; border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .line.selected { box-shadow: 0 0 0 2px #b9a0dc; }
 /* Buzz notices are not bubbles: a quiet centered note */
