@@ -16,6 +16,8 @@ body {
   color: #222;
   font-family: "Marhey", sans-serif;
   font-size: 14px;
+  font-weight: 300;
+  font-style: normal;
   
 }
 #root { width: 100%; max-width: 440px; }
