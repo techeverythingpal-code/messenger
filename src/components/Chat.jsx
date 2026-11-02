@@ -82,7 +82,7 @@ export default function Chat({
   // receipts, while the window is actually focused)
   useMarkSeen({ messages, shareSeen, contactId: contact.id, onSeen, bumpMyReadUntil })
 
-  const { sending, sendMessage, sendBuzz, sendReaction, sendEdit } = useSendMessage({
+  const { sending, sendMessage, sendBuzz, sendReaction, sendEdit, sendVoice } = useSendMessage({
     myId, deviceId, myPrivateKey, contact, dir, addMessages, setError, onBuzzRef,
   })
 
@@ -119,6 +119,16 @@ export default function Chat({
     }
     await sendMessage(plain, () => {
       onSent()
+      setReplyToId(null)
+      stopTyping()
+    })
+  }
+
+  // Composer hands me a finished recording: { blob, seconds, mime }.
+  // A voice note can be a reply too; it can't be sent while editing.
+  async function handleVoice(rec) {
+    if (editTarget || !rec) return
+    await sendVoice({ ...rec, replyTo: replyTarget?.msgId }, () => {
       setReplyToId(null)
       stopTyping()
     })
@@ -196,6 +206,7 @@ export default function Chat({
           contactUsername={contact.username}
           sending={sending}
           onSend={handleSend}
+          onVoice={handleVoice}
           onCancelReply={() => setReplyToId(null)}
           onCancelEdit={() => setEditToId(null)}
           onTyping={notifyTyping}

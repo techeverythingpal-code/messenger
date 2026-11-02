@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import Linkified from '../../lib/linkify'
+import VoiceBubble from './VoiceBubble'
 import { REACTIONS, stripControls, snippetOf, reactChips } from './protocol'
 
 // Built once, not on every render of every line
@@ -19,7 +20,8 @@ function Eyes({ label }) {
 // One line in the chat log: a buzz notice or a message bubble.
 //
 // Props:
-//   m          the message view (see messageView.js); m.edited is true after an edit
+//   m          the message view (see messageView.js); m.edited is true after an edit,
+//              m.voice is set for a voice note (then m.text is null)
 //   myName, friendName
 //   quoted     the message this one replies to (undefined if it isn't available)
 //   reactions  { me, them } emoji for this message, or undefined
@@ -70,7 +72,9 @@ function MessageLine({
           and sits on the right, English left to right, and a line that mixes both
           follows the standard bidirectional rules. */}
       <div dir="auto">
-        {m.text === null ? (
+        {m.voice ? (
+          <VoiceBubble voice={m.voice} />
+        ) : m.text === null ? (
           <em className="bad">🔒 Can't decrypt this message</em>
         ) : (
           <Linkified text={stripControls(m.text)} />
@@ -98,12 +102,13 @@ function MessageLine({
           ))}
         </div>
       )}
-      {selected && m.text !== null && (
+      {/* Voice notes can be replied to and reacted to, but not edited */}
+      {selected && (m.text !== null || m.voice) && (
         <div className="msgbar" onClick={(e) => e.stopPropagation()}>
           <button type="button" className="rbtn" onClick={() => onReply(m)}>
             ↩ Reply
           </button>
-          {m.mine && (
+          {m.mine && !m.voice && (
             <button type="button" className="rbtn" onClick={() => onEdit(m)}>
               ✏️ Edit
             </button>

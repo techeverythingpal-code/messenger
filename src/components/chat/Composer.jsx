@@ -1,7 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MAX_MESSAGE_CHARS } from '../../crypto/encrypt'
+import { MAX_VOICE_SECONDS } from '../../crypto/voice'
 import { PICKER } from '../../lib/emoticons'
 import { EDIT_OVERHEAD, REPLY_OVERHEAD, stripControls, snippetOf } from './protocol'
+import { useVoiceRecorder } from './useVoiceRecorder'
+
+const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
 export default function Composer({
   replyTarget,
@@ -9,6 +13,7 @@ export default function Composer({
   contactUsername,
   sending,
   onSend,        // (text, onSent) => Promise
+  onVoice,       // ({ blob, seconds, mime }) => Promise
   onCancelReply,
   onCancelEdit,
   onTyping,      // notifyTyping from useTyping
@@ -16,7 +21,11 @@ export default function Composer({
 }) {
   const [text, setText] = useState('')
   const [showPicker, setShowPicker] = useState(false)
+  const [voiceError, setVoiceError] = useState('')
   const inputRef = useRef(null)
+
+  const voice = useVoiceRecorder({ onError: setVoiceError })
+  const { recording, cancel: cancelRecording } = voice
 
   // Focus the box whenever a reply is started
   const replyId = replyTarget?.msgId
@@ -31,17 +40,19 @@ export default function Composer({
     editTextRef.current = editTarget?.text ?? ''
   })
 
-  // When an edit starts: put the message's text in the box, cursor at the end
+  // When an edit starts: throw away any recording, put the message's text in
+  // the box, cursor at the end
   const editId = editTarget?.msgId
   useEffect(() => {
     if (!editId) return
+    cancelRecording()
     setText(editTextRef.current)
     const el = inputRef.current
     el?.focus()
     requestAnimationFrame(() => {
       if (el) el.setSelectionRange(el.value.length, el.value.length)
     })
-  }, [editId])
+  }, [editId, cancelRecording])
 
   // Grow (or shrink) the box to fit the text. CSS max-height stops the growth
   // and the box scrolls after that.
@@ -50,13 +61,16 @@ export default function Composer({
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`
-  }, [text])
+  }, [text, recording])
 
   const limit = editTarget
     ? MAX_MESSAGE_CHARS - EDIT_OVERHEAD
     : replyTarget
       ? MAX_MESSAGE_CHARS - REPLY_OVERHEAD
       : MAX_MESSAGE_CHARS
+
+  // The send button becomes a 🎤 when the box is empty (not while editing)
+  const showMic = voice.supported && !editTarget && stripControls(text).trim() === ''
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -100,9 +114,25 @@ export default function Composer({
     })
   }
 
+  function startRecording() {
+    if (sending) return
+    setVoiceError('')
+    setShowPicker(false)
+    voice.start()
+  }
+
+  // Stop the recording and send it (errors while sending show under the chat)
+  async function sendRecording() {
+    if (sending) return
+    const rec = await voice.stop()
+    if (rec) await onVoice(rec)
+  }
+
+  const atLimit = voice.seconds >= MAX_VOICE_SECONDS
+
   return (
     <div className="composer">
-      {showPicker && (
+      {showPicker && !recording && (
         <div className="picker">
           {PICKER.map((emo) => (
             <button key={emo} type="button" className="emo" onClick={() => insertEmoji(emo)}>
@@ -132,51 +162,95 @@ export default function Composer({
         )
       )}
 
-      <form className="row" onSubmit={handleSubmit}>
-        <button
-          type="button"
-          className="iconbtn"
-          title="Emoticons"
-          aria-label="Emoticons"
-          onClick={() => setShowPicker((s) => !s)}
-        >
-          😊
-        </button>
-        <button
-          type="button"
-          className="iconbtn"
-          title="Buzz!"
-          aria-label="Buzz"
-          onClick={onBuzz}
-          disabled={sending}
-        >
-          📳
-        </button>
-        {/* dir="auto": the box follows the first letter you type. Arabic flips it to
-            right to left, English keeps it left to right. */}
-        <textarea
-          ref={inputRef}
-          dir="auto"
-          rows={1}
-          placeholder={editTarget ? 'Edit your message' : 'Type a message'}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            if (e.target.value && !editTarget) onTyping()
-          }}
-          onKeyDown={handleKeyDown}
-          maxLength={limit}
-          autoComplete="off"
-        />
-        <button
-          type="submit"
-          className="sendbtn"
-          disabled={sending}
-          aria-label={editTarget ? 'Save edit' : 'Send'}
-        >
-          {editTarget ? '✓' : '➤'}
-        </button>
-      </form>
+      {voiceError && <div className="voiceerr">{voiceError}</div>}
+
+      {recording ? (
+        // While recording: 🗑 throws it away, the timer runs, ➤ sends it
+        <div className="row recbar" dir="ltr">
+          <button
+            type="button"
+            className="iconbtn"
+            title="Delete recording"
+            aria-label="Delete recording"
+            onClick={cancelRecording}
+          >
+            🗑
+          </button>
+          <span className={`recdot ${atLimit ? 'done' : ''}`} aria-hidden="true" />
+          <span className="rectime" aria-live="polite">
+            {clock(voice.seconds)} / {clock(MAX_VOICE_SECONDS)}
+          </span>
+          <span className="rechint">{atLimit ? 'Max length reached' : 'Recording…'}</span>
+          <button
+            type="button"
+            className="sendbtn"
+            onClick={sendRecording}
+            disabled={sending}
+            aria-label="Send voice note"
+          >
+            ➤
+          </button>
+        </div>
+      ) : (
+        <form className="row" onSubmit={handleSubmit}>
+          <button
+            type="button"
+            className="iconbtn"
+            title="Emoticons"
+            aria-label="Emoticons"
+            onClick={() => setShowPicker((s) => !s)}
+          >
+            😊
+          </button>
+          <button
+            type="button"
+            className="iconbtn"
+            title="Buzz!"
+            aria-label="Buzz"
+            onClick={onBuzz}
+            disabled={sending}
+          >
+            📳
+          </button>
+          {/* dir="auto": the box follows the first letter you type. Arabic flips it to
+              right to left, English keeps it left to right. */}
+          <textarea
+            ref={inputRef}
+            dir="auto"
+            rows={1}
+            placeholder={editTarget ? 'Edit your message' : 'Type a message'}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value)
+              if (e.target.value && !editTarget) onTyping()
+            }}
+            onKeyDown={handleKeyDown}
+            maxLength={limit}
+            autoComplete="off"
+          />
+          {showMic ? (
+            <button
+              type="button"
+              className="sendbtn"
+              title="Record a voice note"
+              aria-label="Record a voice note"
+              onClick={startRecording}
+              disabled={sending}
+            >
+              🎤
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="sendbtn"
+              disabled={sending}
+              aria-label={editTarget ? 'Save edit' : 'Send'}
+            >
+              {editTarget ? '✓' : '➤'}
+            </button>
+          )}
+        </form>
+      )}
     </div>
   )
 }

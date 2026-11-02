@@ -317,3 +317,31 @@ button.callbtn.mute.on:hover:not(:disabled) { background: var(--line); }
   font-size: 14px;
   text-align: center;
 }
+/* ---- Voice notes ---- */
+/* The player inside a bubble: ▶ button, progress bar, time */
+.voice { display: flex; align-items: center; gap: 8px; min-width: 180px; max-width: 240px; padding: 2px 0; white-space: nowrap; cursor: default; }
+button.voicebtn { flex: none; width: 34px; height: 34px; padding: 0; font-size: 14px; line-height: 1; border-radius: 50%; }
+.voicebar { flex: 1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.voicefill { height: 100%; background: var(--purple); transition: width .2s linear; }
+.voicetime { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; color: #666; }
+.voiceerr { font-size: 12px; color: #c62828; margin: 2px 0 4px; white-space: normal; }
+
+/* My bubbles are purple: white button, light bar */
+.line.mine button.voicebtn { background: #fff; color: var(--purple-dark); }
+.line.mine button.voicebtn:hover:not(:disabled) { background: #e3d6f3; }
+.line.mine .voicebar { background: rgba(255, 255, 255, .35); }
+.line.mine .voicefill { background: #fff; }
+.line.mine .voicetime { color: rgba(255, 255, 255, .85); }
+.line.mine .voiceerr { color: #ffd6d6; }
+
+/* The recording bar that replaces the message box while recording */
+.composer .row.recbar { align-items: center; min-height: 38px; }
+.recdot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #e53935; animation: recpulse 1s ease-in-out infinite; }
+.recdot.done { background: #999; animation: none; }
+.rectime { flex: none; font-variant-numeric: tabular-nums; color: #333; }
+.rechint { flex: 1; min-width: 0; font-size: 12px; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes recpulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) {
+  .recdot { animation: none; }
+  .voicefill { transition: none; }
+}
