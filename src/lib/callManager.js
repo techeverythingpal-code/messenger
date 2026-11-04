@@ -175,12 +175,12 @@ async function getMic() {
     })
   } catch (err) {
     if (err && err.name === 'NotAllowedError') {
-      throw new Error('Microphone permission was denied')
+      throw new Error('Microphone permission was denied', { cause: err })
     }
     if (err && err.name === 'NotFoundError') {
-      throw new Error('No microphone found')
+      throw new Error('No microphone found', { cause: err })
     }
-    throw new Error('Could not access the microphone')
+    throw new Error('Could not access the microphone', { cause: err })
   }
 }
 
@@ -459,7 +459,7 @@ export function initCallManager(userId, userName) {
   if (stopListening) stopListening()
 
   me = { id: userId, name: userName || 'Someone' }
-  stopListening = listenForSignals(userId, handleSignal)
+    stopListening = listenForSignals(userId, handleSignal)
   window.addEventListener('beforeunload', onBeforeUnload)
 
   return () => {
