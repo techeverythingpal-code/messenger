@@ -362,3 +362,10 @@ export default function Home({ session }) {
             </button>
           )}
           <DeleteAccount userId={userId} email={session.user.email} />
+        </div>
+      </div>
+
+      {ready && <CallOverlay />}
+    </>
+  )
+}
