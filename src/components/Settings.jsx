@@ -2,9 +2,16 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 export default function Settings({
-  userId, email, shareSeen, shareTyping, onPrivacyChange, onBack,
+  userId, email, username, onUsernameChange,
+  shareSeen, shareTyping, onPrivacyChange, onBack,
 }) {
   const [prefMsg, setPrefMsg] = useState('')
+
+  const [newName, setNewName] = useState(username || '')
+  const [nameBusy, setNameBusy] = useState(false)
+  const [nameMsg, setNameMsg] = useState('')
+  const [nameOk, setNameOk] = useState('')
+
   const [current, setCurrent] = useState('')
   const [pw, setPw] = useState('')
   const [pw2, setPw2] = useState('')
@@ -20,6 +27,33 @@ export default function Settings({
       .eq('id', userId)
     if (error) return setPrefMsg(error.message)
     onPrivacyChange({ [column]: value })
+  }
+
+  async function changeUsername(e) {
+    e.preventDefault()
+    if (nameBusy) return
+    setNameMsg('')
+    setNameOk('')
+
+    const u = newName.trim().toLowerCase()
+    if (!/^[a-z0-9_]{3,20}$/.test(u)) {
+      return setNameMsg('Use 3-20 characters: letters, numbers or underscore.')
+    }
+    if (u === username) return setNameMsg('That is already your username.')
+
+    setNameBusy(true)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ username: u })
+      .eq('id', userId)
+    setNameBusy(false)
+
+    if (error) {
+      return setNameMsg(error.code === '23505' ? 'That username is taken.' : error.message)
+    }
+    setNewName(u)
+    setNameOk(`Your username is now @${u}.`)
+    onUsernameChange(u)
   }
 
   async function changePassword(e) {
@@ -68,6 +102,28 @@ export default function Settings({
       <div className="chat-head">
         <strong>⚙️ Settings</strong>
         <button className="small secondary" onClick={onBack}>← Back</button>
+      </div>
+
+      <div className="section">
+        <h3>Username</h3>
+        <p className="hint">
+          Friends find you by this name. If you change it, your old name becomes free for
+          others to take. Your friends and chats stay the same.
+        </p>
+        <form onSubmit={changeUsername}>
+          <input
+            placeholder="e.g. alice_92"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            maxLength={20}
+            autoComplete="off"
+          />
+          <button type="submit" disabled={nameBusy}>
+            {nameBusy ? 'Saving...' : 'Change username'}
+          </button>
+        </form>
+        {nameMsg && <p className="msg">{nameMsg}</p>}
+        {nameOk && <p className="hint">✅ {nameOk}</p>}
       </div>
 
       <div className="section">

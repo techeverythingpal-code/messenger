@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { ensureDevice } from '../crypto/identity'
 import { deleteKeyPair } from '../crypto/keys'
@@ -80,6 +80,19 @@ export default function Home({ session }) {
     ready,
   })
 
+  // The open chat keeps the friend's current name: if they rename themselves,
+  // the friends list reloads and the open chat picks up the new name too.
+  // A new object is made only when the name really changed, so the chat
+  // does not reconnect on every list reload.
+  const liveName = contact ? friends.find((f) => f.id === contact.id)?.username : undefined
+  const shownContact = useMemo(
+    () =>
+      contact && liveName && liveName !== contact.username
+        ? { ...contact, username: liveName }
+        : contact,
+    [contact, liveName]
+  )
+
   function apply(r) {
     setDevice(r.device)
     setUsername(r.username)
@@ -100,14 +113,18 @@ export default function Home({ session }) {
   useEffect(() => () => clearTimeout(shakeTimer.current), [])
 
   // ----- Voice calls: listen for incoming calls while logged in -----
+  // The name shown to the person I call is read from a ref, so renaming
+  // myself does not restart the call listener (or drop a call in progress).
+  const callNameRef = useRef('')
+  callNameRef.current = `@${username}`
   useEffect(() => {
     if (!ready) return
-    const stop = initCallManager(userId, `@${username}`)
+    const stop = initCallManager(userId, callNameRef.current)
     return () => {
       stop()
       closeSignaling()
     }
-  }, [ready, userId, username])
+  }, [ready, userId])
 
   const shake = useCallback(() => {
     setShaking(true)
@@ -303,25 +320,27 @@ export default function Home({ session }) {
                   <Settings
                     userId={userId}
                     email={session.user.email}
+                    username={username}
+                    onUsernameChange={setUsername}
                     shareSeen={shareSeen}
                     shareTyping={shareTyping}
                     onPrivacyChange={handlePrivacyChange}
                     onBack={() => setShowSettings(false)}
                   />
-                ) : contact ? (
+                ) : shownContact ? (
                   <Chat
-                    key={contact.id}
+                    key={shownContact.id}
                     myId={userId}
                     myName={username}
                     deviceId={deviceId}
                     myPrivateKey={device.privateKey}
-                    contact={contact}
-                    status={online.get(contact.id)}
-                    expireAfter={friends.find((f) => f.id === contact.id)?.expireAfter ?? null}
+                    contact={shownContact}
+                    status={online.get(shownContact.id)}
+                    expireAfter={friends.find((f) => f.id === shownContact.id)?.expireAfter ?? null}
                     shareSeen={shareSeen}
                     shareTyping={shareTyping}
                     onExpiryChanged={reload}
-                    onSeen={(id) => markRead(contact.id, id)}
+                    onSeen={(id) => markRead(shownContact.id, id)}
                     onBuzz={shake}
                     onClose={() => setContact(null)}
                   />

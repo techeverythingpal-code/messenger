@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 
 // Load my contact rows and split them into friends / incoming / outgoing
@@ -41,6 +41,13 @@ export function useContacts(userId, enabled) {
   const [lists, setLists] = useState({ friends: [], incoming: [], outgoing: [] })
   const [error, setError] = useState('')
 
+  // Everyone in my lists, with the name I currently show for them.
+  // Read inside the realtime handler without re-subscribing.
+  const namesRef = useRef(new Map())
+  namesRef.current = new Map(
+    [...lists.friends, ...lists.incoming, ...lists.outgoing].map((p) => [p.id, p.username])
+  )
+
   const reload = useCallback(
     () =>
       fetchContacts(userId)
@@ -58,6 +65,13 @@ export function useContacts(userId, enabled) {
     const channel = supabase
       .channel(`contacts:${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, () => reload())
+      // A friend (or someone with a pending request) changed their username
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+        const p = payload.new
+        if (!namesRef.current.has(p.id)) return // not one of my contacts
+        if (namesRef.current.get(p.id) === p.username) return // name didn't change
+        reload()
+      })
       .subscribe()
     return () => {
       supabase.removeChannel(channel)

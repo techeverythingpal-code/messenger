@@ -33,7 +33,7 @@ export default function UsernameForm({ userId, onSaved }) {
   return (
     <form onSubmit={handleSubmit}>
       <h2>Choose your username</h2>
-      <p className="hint">Friends will find you by this name. You can't change it later.</p>
+      <p className="hint">Friends will find you by this name. You can change it later in Settings.</p>
       <input
         placeholder="e.g. alice_92"
         value={name}
