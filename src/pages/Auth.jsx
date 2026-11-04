@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase, emailLinkFailed } from '../lib/supabase'
 import { APP_NAME } from '../lib/appInfo'
+import PasswordInput from '../components/PasswordInput'
+import SignUp from './SignUp'
 
 const COOLDOWN_SECONDS = 60
 const LINK_MESSAGE = 'That email link is invalid or has expired. Please request a new one.'
 
+// Log in and "forgot password". Sign up has its own screen (SignUp.jsx).
 export default function Auth() {
-  const [mode, setMode] = useState('login') // 'login' | 'signup' | 'forgot'
+  const [mode, setMode] = useState('login') // 'login' | 'forgot' | 'signup'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -64,41 +67,39 @@ export default function Auth() {
       return
     }
 
-    if (password.length < 8) {
-      setMessage('Password must be at least 8 characters.')
-      return
-    }
-
     setBusy(true)
     try {
-      if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({ email, password })
-        if (error) throw error
-        setInfo('Account created. Check your email to confirm, then log in.')
-        setMode('login')
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      })
+      if (error) throw error
     } catch (err) {
-      setMessage(err.message)
+      setMessage(
+        err.code === 'email_not_confirmed'
+          ? 'Please confirm your email first: open the link we sent you.'
+          : err.code === 'invalid_credentials'
+            ? 'Wrong email or password.'
+            : err.status === 429
+              ? 'Too many attempts. Please wait a few minutes and try again.'
+              : err.message
+      )
     } finally {
       setBusy(false)
     }
   }
 
-  const title =
-    mode === 'login' ? 'Log in' : mode === 'signup' ? 'Create account' : 'Reset your password'
+  if (mode === 'signup') return <SignUp onBack={() => go('login')} />
+
+  const title = mode === 'login' ? 'Log in' : 'Reset your password'
 
   const buttonLabel = busy
     ? 'Please wait...'
     : mode === 'login'
       ? 'Log in'
-      : mode === 'signup'
-        ? 'Sign up'
-        : wait > 0
-          ? `Send again in ${wait}s`
-          : 'Send reset link'
+      : wait > 0
+        ? `Send again in ${wait}s`
+        : 'Send reset link'
 
   return (
     <div className="card">
@@ -119,29 +120,27 @@ export default function Auth() {
           required
         />
 
-        {mode !== 'forgot' &&  (
-          <input
-            type="password"
-            placeholder="Password (8+ characters)"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            required
-          />
-        )}
-
         {mode === 'login' && (
-          <p className="forgot">
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault()
-                go('forgot')
-              }}
-            >
-              Forgot password?
-            </a>
-          </p>
+          <>
+            <PasswordInput
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+            <p className="forgot">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault()
+                  go('forgot')
+                }}
+              >
+                Forgot password?
+              </a>
+            </p>
+          </>
         )}
 
         <button type="submit" disabled={busy || (mode === 'forgot' && wait > 0)}>
@@ -153,19 +152,12 @@ export default function Auth() {
       {info && <p className="hint">{info}</p>}
 
       <p className="switch">
-        {mode === 'login' && (
+        {mode === 'login' ? (
           <>
             No account?{' '}
             <a href="#" onClick={(e) => { e.preventDefault(); go('signup') }}>Sign up</a>
           </>
-        )}
-        {mode === 'signup' && (
-          <>
-            Already have an account?{' '}
-            <a href="#" onClick={(e) => { e.preventDefault(); go('login') }}>Log in</a>
-          </>
-        )}
-        {mode === 'forgot' && (
+        ) : (
           <a href="#" onClick={(e) => { e.preventDefault(); go('login') }}>Back to log in</a>
         )}
       </p>
