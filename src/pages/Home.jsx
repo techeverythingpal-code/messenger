@@ -113,10 +113,13 @@ export default function Home({ session }) {
   useEffect(() => () => clearTimeout(shakeTimer.current), [])
 
   // ----- Voice calls: listen for incoming calls while logged in -----
-  // The name shown to the person I call is read from a ref, so renaming
+  // The name shown to the person I call is kept in a ref, so renaming
   // myself does not restart the call listener (or drop a call in progress).
+  // The name effect comes first, so the ref is filled before the listener starts.
   const callNameRef = useRef('')
-  callNameRef.current = `@${username}`
+  useEffect(() => {
+    callNameRef.current = `@${username}`
+  }, [username])
   useEffect(() => {
     if (!ready) return
     const stop = initCallManager(userId, callNameRef.current)
@@ -359,10 +362,3 @@ export default function Home({ session }) {
             </button>
           )}
           <DeleteAccount userId={userId} email={session.user.email} />
-        </div>
-      </div>
-
-      {ready && <CallOverlay />}
-    </>
-  )
-}

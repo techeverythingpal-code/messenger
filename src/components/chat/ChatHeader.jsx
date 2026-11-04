@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import useCall from '../../hooks/useCall'
 
@@ -12,7 +13,7 @@ const EXPIRY_OPTIONS = [
 // warning, and the disappearing-messages setting.
 //
 // Props:
-//   contact         the friend (needs username and rowId)
+//   contact         the friend (needs username and rowId; email if we have it)
 //   status          'available' | 'busy' | anything else = offline
 //   contactDevices  [{ id, name, fp }] their devices and fingerprints
 //   notice          warning text, or '' for none
@@ -23,6 +24,8 @@ export default function ChatHeader({
   onDismissNotice, onExpiryChanged, onError, onClose,
 }) {
   const { call, startCall } = useCall()
+  // Phones have no hover, so tapping the name shows / hides the email
+  const [showEmail, setShowEmail] = useState(false)
 
   const dot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
   const statusText =
@@ -61,8 +64,20 @@ export default function ChatHeader({
   return (
     <>
       <div className="chat-head">
-        <strong>
+        <strong
+          title={contact.email || undefined}
+          onClick={() => contact.email && setShowEmail((v) => !v)}
+          style={contact.email ? { cursor: 'pointer' } : undefined}
+        >
           <span className={`dot ${dot}`} /> @{contact.username}
+          {showEmail && contact.email && (
+            <span
+              className="muted"
+              style={{ display: 'block', fontWeight: 'normal', fontSize: 12 }}
+            >
+              {contact.email}
+            </span>
+          )}
         </strong>
         <span className="muted">{statusText}</span>
         <button

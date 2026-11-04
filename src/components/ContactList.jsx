@@ -8,7 +8,7 @@ function FriendRow({ f, status, unread, onOpen, onRemove }) {
       <button
         className="linklike"
         onClick={() => onOpen(f)}
-        
+        title={f.email || undefined}
       >
         <span className={`dot ${dot}`} />
         @{f.username}
@@ -106,7 +106,7 @@ export default function ContactList({
           <h3>Requests ({incoming.length})</h3>
           {incoming.map((it) => (
             <div className="contact" key={it.rowId}>
-              <span>@{it.username}</span>
+              <span title={it.email || undefined}>@{it.username}</span>
               <span className="actions">
                 <button className="small" onClick={() => accept(it)}>Accept</button>
                 <button className="small secondary" onClick={() => remove(it)}>Decline</button>
@@ -155,7 +155,7 @@ export default function ContactList({
           <h3>Sent requests</h3>
           {outgoing.map((it) => (
             <div className="contact" key={it.rowId}>
-              <span>@{it.username} (waiting)</span>
+              <span title={it.email || undefined}>@{it.username} (waiting)</span>
               <button className="small secondary" onClick={() => remove(it)}>Cancel</button>
             </div>
           ))}

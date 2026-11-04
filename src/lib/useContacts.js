@@ -13,15 +13,20 @@ async function fetchContacts(userId) {
   const ids = rows.map(otherId)
 
   let profiles = []
+  let emails = []
   if (ids.length) {
-    const res = await supabase
-      .from('profiles')
-      .select('id, username')
-      .in('id', ids)
+    const [res, mail] = await Promise.all([
+      supabase.from('profiles').select('id, username').in('id', ids),
+      // Emails of my friends and pending requests (see supabase/contact_emails.sql)
+      supabase.rpc('contact_emails'),
+    ])
     if (res.error) throw res.error
     profiles = res.data
+    // A missing email is not worth breaking the contact list over
+    emails = mail.error ? [] : mail.data
   }
   const byId = new Map(profiles.map((p) => [p.id, p]))
+  const emailById = new Map(emails.map((e) => [e.id, e.email]))
 
   const friends = []
   const incoming = []
@@ -29,7 +34,12 @@ async function fetchContacts(userId) {
   for (const r of rows) {
     const p = byId.get(otherId(r))
     if (!p) continue
-    const item = { rowId: r.id, expireAfter: r.disappear_after_seconds, ...p }
+    const item = {
+      rowId: r.id,
+      expireAfter: r.disappear_after_seconds,
+      ...p,
+      email: emailById.get(p.id) ?? null,
+    }
     if (r.status === 'accepted') friends.push(item)
     else if (r.addressee_id === userId) incoming.push(item)
     else outgoing.push(item)
@@ -44,9 +54,11 @@ export function useContacts(userId, enabled) {
   // Everyone in my lists, with the name I currently show for them.
   // Read inside the realtime handler without re-subscribing.
   const namesRef = useRef(new Map())
-  namesRef.current = new Map(
-    [...lists.friends, ...lists.incoming, ...lists.outgoing].map((p) => [p.id, p.username])
-  )
+  useEffect(() => {
+    namesRef.current = new Map(
+      [...lists.friends, ...lists.incoming, ...lists.outgoing].map((p) => [p.id, p.username])
+    )
+  }, [lists])
 
   const reload = useCallback(
     () =>
