@@ -38,10 +38,10 @@ export default function CallOverlay() {
 
   const inCall = call.status === 'connecting' || call.status === 'connected'
 
-  // Tick every second while the call is connected (for the timer)
+  // Tick every second while the call is connected (for the timer).
+  // Until the first tick the timer simply shows 00:00.
   useEffect(() => {
     if (call.status !== 'connected') return
-    setNow(Date.now())
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [call.status])
@@ -54,14 +54,10 @@ export default function CallOverlay() {
   }, [call.notice, clearNotice])
 
   // During a call: find the available sound outputs, and refresh the list
-  // when a headset is plugged in or removed
+  // when a headset is plugged in or removed. When the call ends, the
+  // cleanup clears the list so the next call starts fresh.
   useEffect(() => {
-    if (!inCall || !canChooseOutput()) {
-      setOutputs([])
-      setPickerOpen(false)
-      setOutputError('')
-      return
-    }
+    if (!inCall || !canChooseOutput()) return
 
     let cancelled = false
 
@@ -81,6 +77,9 @@ export default function CallOverlay() {
     return () => {
       cancelled = true
       navigator.mediaDevices.removeEventListener('devicechange', refresh)
+      setOutputs([])
+      setPickerOpen(false)
+      setOutputError('')
     }
   }, [inCall])
 
@@ -109,11 +108,14 @@ export default function CallOverlay() {
       ? Math.max(0, Math.floor((now - call.connectedAt) / 1000))
       : 0
 
-  let label = ''
-  if (call.status === 'calling') label = 'Calling...'
-  else if (call.status === 'incoming') label = 'Incoming voice call'
-  else if (call.status === 'connecting') label = 'Connecting...'
-  else label = formatTime(seconds)
+  const label =
+    call.status === 'calling'
+      ? 'Calling...'
+      : call.status === 'incoming'
+        ? 'Incoming voice call'
+        : call.status === 'connecting'
+          ? 'Connecting...'
+          : formatTime(seconds)
 
   const canMute = inCall
   const canPickOutput = inCall && outputs.length > 1
