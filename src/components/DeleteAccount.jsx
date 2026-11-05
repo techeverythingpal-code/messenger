@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { deleteKeyPair } from '../crypto/keys'
+import { deleteAllMyAvatars } from '../lib/avatars'
 
 export default function DeleteAccount({ userId, email }) {
   const [open, setOpen] = useState(false)
@@ -29,6 +30,15 @@ export default function DeleteAccount({ userId, email }) {
       // 1. Re-check the password. This also gives the server a fresh login to verify.
       const { error: authErr } = await supabase.auth.signInWithPassword({ email, password })
       if (authErr) throw new Error('Wrong password.')
+
+      // 1b. Delete my profile picture files. The database can't delete storage
+      //     files by itself, so this must happen while I'm still signed in.
+      //     A failure here shouldn't block deleting the account.
+      try {
+        await deleteAllMyAvatars(userId)
+      } catch {
+        /* ignore */
+      }
 
       // 2. Delete the account on the server
       const { error: rpcErr } = await supabase.rpc('delete_my_account')
@@ -70,7 +80,7 @@ export default function DeleteAccount({ userId, email }) {
       <form className="dangerbox" onSubmit={handleDelete}>
         <strong>Delete account permanently</strong>
         <ul>
-          <li>Your profile, username and friend list are erased.</li>
+          <li>Your profile, profile picture, username and friend list are erased.</li>
           <li>
             <strong>All messages are erased for you and for your friends</strong>,
             both sent and received.

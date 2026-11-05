@@ -16,7 +16,7 @@ async function fetchContacts(userId) {
   let emails = []
   if (ids.length) {
     const [res, mail] = await Promise.all([
-      supabase.from('profiles').select('id, username').in('id', ids),
+      supabase.from('profiles').select('id, username, avatar_path').in('id', ids),
       // Emails of my friends and pending requests (see supabase/contact_emails.sql)
       supabase.rpc('contact_emails'),
     ])
@@ -51,12 +51,15 @@ export function useContacts(userId, enabled) {
   const [lists, setLists] = useState({ friends: [], incoming: [], outgoing: [] })
   const [error, setError] = useState('')
 
-  // Everyone in my lists, with the name I currently show for them.
+  // Everyone in my lists, with the name and picture I currently show for them.
   // Read inside the realtime handler without re-subscribing.
-  const namesRef = useRef(new Map())
+  const shownRef = useRef(new Map())
   useEffect(() => {
-    namesRef.current = new Map(
-      [...lists.friends, ...lists.incoming, ...lists.outgoing].map((p) => [p.id, p.username])
+    shownRef.current = new Map(
+      [...lists.friends, ...lists.incoming, ...lists.outgoing].map((p) => [
+        p.id,
+        { username: p.username, avatar_path: p.avatar_path ?? null },
+      ])
     )
   }, [lists])
 
@@ -77,11 +80,14 @@ export function useContacts(userId, enabled) {
     const channel = supabase
       .channel(`contacts:${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, () => reload())
-      // A friend (or someone with a pending request) changed their username
+      // A friend (or someone with a pending request) changed their username or picture
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
         const p = payload.new
-        if (!namesRef.current.has(p.id)) return // not one of my contacts
-        if (namesRef.current.get(p.id) === p.username) return // name didn't change
+        const shown = shownRef.current.get(p.id)
+        if (!shown) return // not one of my contacts
+        if (shown.username === p.username && shown.avatar_path === (p.avatar_path ?? null)) {
+          return // nothing I show changed (e.g. they toggled a privacy setting)
+        }
         reload()
       })
       .subscribe()

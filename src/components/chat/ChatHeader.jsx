@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import useCall from '../../hooks/useCall'
+import Avatar from '../Avatar'
 
 const EXPIRY_OPTIONS = [
   { value: 'off', label: 'Off', seconds: null },
@@ -13,7 +14,7 @@ const EXPIRY_OPTIONS = [
 // warning, and the disappearing-messages setting.
 //
 // Props:
-//   contact         the friend (needs username and rowId; email if we have it)
+//   contact         the friend (needs username and rowId; email and avatar_path if we have them)
 //   status          'available' | 'busy' | anything else = offline
 //   contactDevices  [{ id, name, fp }] their devices and fingerprints
 //   notice          warning text, or '' for none
@@ -69,7 +70,11 @@ export default function ChatHeader({
           onClick={() => contact.email && setShowEmail((v) => !v)}
           style={contact.email ? { cursor: 'pointer' } : undefined}
         >
-          <span className={`dot ${dot}`} /> @{contact.username}
+          <span className="avatar-wrap">
+            <Avatar path={contact.avatar_path} size={36} name={`@${contact.username}`} />
+            <span className={`dot ${dot}`} />
+          </span>{' '}
+          @{contact.username}
           {showEmail && contact.email && (
             <span
               className="muted"

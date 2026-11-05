@@ -26,18 +26,19 @@ import { APP_NAME } from '../lib/appInfo'
 async function loadEverything(userId) {
   const device = await ensureDevice(userId)
   if (device.status !== 'ok') {
-    return { device, username: undefined, shareSeen: true, shareTyping: true }
+    return { device, username: undefined, avatarPath: null, shareSeen: true, shareTyping: true }
   }
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('username, share_seen, share_typing')
+    .select('username, avatar_path, share_seen, share_typing')
     .eq('id', userId)
     .single()
   if (error) throw error
   return {
     device,
     username: data.username,
+    avatarPath: data.avatar_path ?? null,
     shareSeen: data.share_seen !== false,
     shareTyping: data.share_typing !== false,
   }
@@ -47,6 +48,7 @@ export default function Home({ session }) {
   const userId = session.user.id
   const [device, setDevice] = useState(null) // null = loading
   const [username, setUsername] = useState(undefined) // undefined = loading, null = not chosen
+  const [avatarPath, setAvatarPath] = useState(null) // my profile picture (null = none)
   const [shareSeen, setShareSeen] = useState(true)
   const [shareTyping, setShareTyping] = useState(true)
   const [error, setError] = useState('')
@@ -80,22 +82,26 @@ export default function Home({ session }) {
     ready,
   })
 
-  // The open chat keeps the friend's current name: if they rename themselves,
-  // the friends list reloads and the open chat picks up the new name too.
-  // A new object is made only when the name really changed, so the chat
+  // The open chat keeps the friend's current name and picture: if they change
+  // them, the friends list reloads and the open chat picks up the new ones too.
+  // A new object is made only when something really changed, so the chat
   // does not reconnect on every list reload.
-  const liveName = contact ? friends.find((f) => f.id === contact.id)?.username : undefined
-  const shownContact = useMemo(
-    () =>
-      contact && liveName && liveName !== contact.username
-        ? { ...contact, username: liveName }
-        : contact,
-    [contact, liveName]
-  )
+  const liveFriend = contact ? friends.find((f) => f.id === contact.id) : undefined
+  const liveName = liveFriend?.username
+  const liveAvatar = liveFriend ? (liveFriend.avatar_path ?? null) : undefined
+  const shownContact = useMemo(() => {
+    if (!contact || !liveName) return contact
+    const nameChanged = liveName !== contact.username
+    const avatarChanged = liveAvatar !== (contact.avatar_path ?? null)
+    return nameChanged || avatarChanged
+      ? { ...contact, username: liveName, avatar_path: liveAvatar }
+      : contact
+  }, [contact, liveName, liveAvatar])
 
   function apply(r) {
     setDevice(r.device)
     setUsername(r.username)
+    setAvatarPath(r.avatarPath)
     setShareSeen(r.shareSeen)
     setShareTyping(r.shareTyping)
   }
@@ -239,6 +245,7 @@ export default function Home({ session }) {
 
         <ProfileBar
           displayName={username ? `@${username}` : session.user.email}
+          avatarPath={avatarPath}
           ready={ready}
           status={status}
           onStatusChange={changeStatus}
@@ -325,6 +332,8 @@ export default function Home({ session }) {
                     email={session.user.email}
                     username={username}
                     onUsernameChange={setUsername}
+                    avatarPath={avatarPath}
+                    onAvatarChange={setAvatarPath}
                     shareSeen={shareSeen}
                     shareTyping={shareTyping}
                     onPrivacyChange={handlePrivacyChange}
@@ -365,7 +374,7 @@ export default function Home({ session }) {
         </div>
       </div>
 
-      {ready && <CallOverlay />}
+      {ready && <CallOverlay friends={friends} />}
     </>
   )
 }

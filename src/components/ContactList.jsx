@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import Avatar from './Avatar'
 
 function FriendRow({ f, status, unread, onOpen, onRemove }) {
   const dot = status === 'available' ? 'on' : status === 'busy' ? 'busy' : ''
@@ -10,7 +11,10 @@ function FriendRow({ f, status, unread, onOpen, onRemove }) {
         onClick={() => onOpen(f)}
         title={f.email || undefined}
       >
-        <span className={`dot ${dot}`} />
+        <span className="avatar-wrap">
+          <Avatar path={f.avatar_path} size={32} name={`@${f.username}`} />
+          <span className={`dot ${dot}`} />
+        </span>
         @{f.username}
         {status === 'busy' && <span className="tag">busy</span>}
         {unread > 0 && <span className="badge">{unread}</span>}
@@ -106,7 +110,10 @@ export default function ContactList({
           <h3>Requests ({incoming.length})</h3>
           {incoming.map((it) => (
             <div className="contact" key={it.rowId}>
-              <span title={it.email || undefined}>@{it.username}</span>
+              <span className="person" title={it.email || undefined}>
+                <Avatar path={it.avatar_path} size={28} name={`@${it.username}`} />
+                @{it.username}
+              </span>
               <span className="actions">
                 <button className="small" onClick={() => accept(it)}>Accept</button>
                 <button className="small secondary" onClick={() => remove(it)}>Decline</button>
@@ -155,7 +162,10 @@ export default function ContactList({
           <h3>Sent requests</h3>
           {outgoing.map((it) => (
             <div className="contact" key={it.rowId}>
-              <span title={it.email || undefined}>@{it.username} (waiting)</span>
+              <span className="person" title={it.email || undefined}>
+                <Avatar path={it.avatar_path} size={28} name={`@${it.username}`} />
+                @{it.username} (waiting)
+              </span>
               <button className="small secondary" onClick={() => remove(it)}>Cancel</button>
             </div>
           ))}

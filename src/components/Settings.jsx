@@ -1,11 +1,23 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { uploadAvatar, removeAvatar } from '../lib/avatars'
+import Avatar from './Avatar'
+import AvatarCropper from './AvatarCropper'
+
+const MAX_PHOTO_BYTES = 20 * 1024 * 1024 // the original photo, before cropping
 
 export default function Settings({
   userId, email, username, onUsernameChange,
+  avatarPath, onAvatarChange,
   shareSeen, shareTyping, onPrivacyChange, onBack,
 }) {
   const [prefMsg, setPrefMsg] = useState('')
+
+  const fileRef = useRef(null)
+  const [cropFile, setCropFile] = useState(null) // the photo being cropped
+  const [picBusy, setPicBusy] = useState(false)
+  const [picMsg, setPicMsg] = useState('')
+  const [picOk, setPicOk] = useState('')
 
   const [newName, setNewName] = useState(username || '')
   const [nameBusy, setNameBusy] = useState(false)
@@ -27,6 +39,42 @@ export default function Settings({
       .eq('id', userId)
     if (error) return setPrefMsg(error.message)
     onPrivacyChange({ [column]: value })
+  }
+
+  function pickPhoto(e) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // so picking the same file again still works
+    setPicMsg('')
+    setPicOk('')
+    if (!file) return
+    if (!file.type.startsWith('image/')) return setPicMsg('Please choose a picture file.')
+    if (file.size > MAX_PHOTO_BYTES) return setPicMsg('That picture is too large (max 20 MB).')
+    setCropFile(file)
+  }
+
+  async function savePhoto(blob) {
+    setPicMsg('')
+    const path = await uploadAvatar(userId, blob, avatarPath) // errors go to onError
+    setCropFile(null)
+    setPicOk('Your profile picture was updated.')
+    onAvatarChange(path)
+  }
+
+  async function deletePhoto() {
+    if (picBusy || !avatarPath) return
+    if (!window.confirm('Remove your profile picture?')) return
+    setPicMsg('')
+    setPicOk('')
+    setPicBusy(true)
+    try {
+      await removeAvatar(userId, avatarPath)
+      setPicOk('Your profile picture was removed.')
+      onAvatarChange(null)
+    } catch (err) {
+      setPicMsg(err.message)
+    } finally {
+      setPicBusy(false)
+    }
   }
 
   async function changeUsername(e) {
@@ -102,6 +150,47 @@ export default function Settings({
       <div className="chat-head">
         <strong>⚙️ Settings</strong>
         <button className="small secondary" onClick={onBack}>← Back</button>
+      </div>
+
+      <div className="section">
+        <h3>Profile picture</h3>
+        <p className="hint">Only your friends and people with a pending request can see it.</p>
+        {cropFile ? (
+          <AvatarCropper
+            file={cropFile}
+            onDone={savePhoto}
+            onCancel={() => setCropFile(null)}
+            onError={(m) => setPicMsg(m)}
+          />
+        ) : (
+          <div className="avatar-row">
+            <Avatar path={avatarPath} size={72} name={username ? `@${username}` : ''} />
+            <div className="avatar-actions">
+              <button type="button" onClick={() => fileRef.current?.click()} disabled={picBusy}>
+                {avatarPath ? 'Change picture' : 'Choose picture'}
+              </button>
+              {avatarPath && (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={deletePhoto}
+                  disabled={picBusy}
+                >
+                  {picBusy ? 'Removing...' : 'Remove'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          onChange={pickPhoto}
+          style={{ display: 'none' }}
+        />
+        {picMsg && <p className="msg">{picMsg}</p>}
+        {picOk && <p className="hint">✅ {picOk}</p>}
       </div>
 
       <div className="section">

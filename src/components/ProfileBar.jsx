@@ -1,10 +1,12 @@
 import { STATUSES, statusDot } from '../lib/status'
 import { canVibrate } from '../lib/haptics'
+import Avatar from './Avatar'
 
 // The bar under the title: who I am, my status, and the quick-toggle buttons.
 // It only displays things. Every action is handed in from Home as a prop.
 export default function ProfileBar({
   displayName,
+  avatarPath,
   ready,
   status,
   onStatusChange,
@@ -20,7 +22,16 @@ export default function ProfileBar({
   return (
     <div className="profilebar">
       <div className="who">
-        <span className={`dot ${statusDot(status)}`} />
+        <button
+          type="button"
+          className="avatar-wrap avatar-btn"
+          onClick={ready ? onOpenSettings : undefined}
+          disabled={!ready}
+          title="Change profile picture"
+        >
+          <Avatar path={avatarPath} size={32} name={displayName} />
+          <span className={`dot ${statusDot(status)}`} />
+        </button>
         <span className="name">{displayName}</span>
         {ready && (
           <select value={status} onChange={(e) => onStatusChange(e.target.value)}>

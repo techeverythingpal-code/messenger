@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react'
 import useCall from '../hooks/useCall'
+import Avatar from './Avatar'
 import {
   canChooseOutput,
   getOutputDeviceId,
@@ -27,7 +28,9 @@ async function listOutputs() {
     }))
 }
 
-export default function CallOverlay() {
+// friends: my friends list, used to show the other person's profile picture.
+// The picture is looked up here by their id, never taken from the call message.
+export default function CallOverlay({ friends = [] }) {
   const { call, acceptCall, rejectCall, hangUp, toggleMute, clearNotice } = useCall()
   const [now, setNow] = useState(() => Date.now())
 
@@ -117,13 +120,17 @@ export default function CallOverlay() {
           ? 'Connecting...'
           : formatTime(seconds)
 
+  const peerAvatar = friends.find((f) => f.id === call.peerId)?.avatar_path ?? null
+
   const canMute = inCall
   const canPickOutput = inCall && outputs.length > 1
 
   return (
     <div className="call-overlay" role="dialog" aria-modal="true" aria-label="Voice call">
       <div className="call-box">
-        <div className="call-avatar" aria-hidden="true">📞</div>
+        <div className={`call-avatar ${peerAvatar ? 'has-pic' : ''}`} aria-hidden="true">
+          {peerAvatar ? <Avatar path={peerAvatar} size={96} name={call.peerName} /> : '📞'}
+        </div>
         <h2 className="call-name">{call.peerName}</h2>
         <p className="call-status" aria-live="polite">{label}</p>
 
